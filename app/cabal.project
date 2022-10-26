@@ -1,0 +1,4 @@
+packages: ../csvScheme.cabal
+jobs: $ncpus
+package csvScheme
+  ghc-options: -Werror -O0
