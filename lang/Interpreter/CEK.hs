@@ -11,25 +11,26 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Except
 import Control.Lens
+import Control.Lens.Operators
 import Control.Lens.TH
 
 
 import Data.Types.Ty
 import Data.Value.Value
 import Data.Term.Term
+import qualified Interpreter.TypeCheck as TI
 
 newtype Table a = Table [[a]]
 
 data Environment
   = Environment
     { _bindings :: Map.Map T.Text Value
-    , _typeAssignments :: Map.Map Term Ty
     }
     deriving (Eq, Show)
 
 makeLenses ''Environment
 
-emptyEnvironment = Environment { _bindings = Map.empty, _typeAssignments = Map.empty }
+emptyEnvironment = Environment { _bindings = Map.empty }
 
 extend :: T.Text -> Value -> Environment -> Environment
 extend v b ctx = ctx & bindings . (at v) ?~ b
@@ -45,6 +46,8 @@ data InterpreterState
   { _control :: Term
   , _environment :: Environment
   , _kontinuation :: Kont
+  , _typeAssignments :: TI.Subst
+  , _tiCounter ::Int
   }
   deriving (Eq, Show)
 
@@ -57,6 +60,8 @@ initialState t = InterpreterState
   { _control = t
   , _environment = emptyEnvironment
   , _kontinuation = Terminate
+  , _typeAssignments = TI.nullSubst
+  , _tiCounter = 0
   }
 
 
@@ -124,6 +129,19 @@ interpret = do
      control <.= term
      v <- interpret
      return (label, v)
+
+   newTyVar :: T.Text -> MInterpret Ty
+   newTyVar prefix = do
+     c <- tiCounter <+= 1
+     return (TVar (prefix <> (T.pack . show $ c)))
+     
+   instantiate :: TI.TypeScheme -> MInterpret Ty
+   instantiate (TI.TypeScheme vars t) = do
+     nvars <- mapM (\_ -> newTyVar "a") vars
+     let s = Map.fromList (zip vars nvars)
+     return $ TI.apply s t
+
+         
 
 run :: MInterpret a -> InterpreterState -> Either T.Text (a, InterpreterState)
 run s = (runExcept . runStateT s)

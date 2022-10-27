@@ -31,6 +31,7 @@ executable csvScheme
       , Data.Value.Value
       , Interpreter.CEK
       , Parser
+      , Interpreter.TypeCheck
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

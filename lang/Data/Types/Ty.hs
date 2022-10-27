@@ -8,9 +8,10 @@ import qualified Data.Text as T
 data Ty
  = TInt
  | TString
+ | TBool
+ | TVar T.Text
  | TFn Ty Ty
- | TRecord T.Text [Ty]
- | TUnion T.Text [(T.Text, Ty)]
+ | TRecord T.Text [(T.Text, Ty)]
  deriving (Eq, Show)
 
 makePrisms ''Ty
