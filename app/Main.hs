@@ -7,9 +7,11 @@ module Main where
 import qualified Data.Text as T
 
 import Interpreter.CEK
+import Interpreter.TypeCheck
 import Data.Types.Ty
 import Data.Value.Value
 import Data.Term.Term
+import qualified Data.Map as Map
 import Parser
 import System.Console.Haskeline
 
@@ -30,5 +32,12 @@ repl = do
            repl
         Right form -> do
             outputStrLn . show $ form
-            outputStrLn . show $ run interpret (initialState form)
+            let types = typeInference form
+            case types of
+              Left e -> 
+                  outputStrLn . show $ e
+              Right (t, s) -> do
+                  outputStrLn . show $ t
+                  outputStrLn . show $ s
+                  outputStrLn . show $ run interpret (initialState form)
             repl

@@ -46,8 +46,6 @@ data InterpreterState
   { _control :: Term
   , _environment :: Environment
   , _kontinuation :: Kont
-  , _typeAssignments :: TI.Subst
-  , _tiCounter ::Int
   }
   deriving (Eq, Show)
 
@@ -60,8 +58,6 @@ initialState t = InterpreterState
   { _control = t
   , _environment = emptyEnvironment
   , _kontinuation = Terminate
-  , _typeAssignments = TI.nullSubst
-  , _tiCounter = 0
   }
 
 
@@ -130,16 +126,6 @@ interpret = do
      v <- interpret
      return (label, v)
 
-   newTyVar :: T.Text -> MInterpret Ty
-   newTyVar prefix = do
-     c <- tiCounter <+= 1
-     return (TVar (prefix <> (T.pack . show $ c)))
-     
-   instantiate :: TI.TypeScheme -> MInterpret Ty
-   instantiate (TI.TypeScheme vars t) = do
-     nvars <- mapM (\_ -> newTyVar "a") vars
-     let s = Map.fromList (zip vars nvars)
-     return $ TI.apply s t
 
          
 
