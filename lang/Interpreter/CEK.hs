@@ -90,7 +90,14 @@ interpret = do
            let ctx = (curr ^. environment) & set bindings e
            environment <.= ctx
            interpret
-         Just v -> return v
+         Just (VInt v) -> do
+           control <.= I v
+           interpret
+         Just (VText v) -> do
+           control <.= S v
+           interpret
+         Just (VTable _) -> throwError "unimplemented"
+           
          Nothing -> throwError $ "unbound variable: " <> n
     (App f x) -> do
        control <.= f
