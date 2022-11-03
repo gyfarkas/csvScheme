@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Parser where
-    
+
 import qualified Data.Text as T
-import Text.Parsec 
-import Text.Parsec.Char 
+import Text.Parsec
+import Text.Parsec.Char
 import Control.Monad.Identity
 
 import Data.Term.Term
@@ -16,6 +16,9 @@ sourceName1 = "input"
 parse :: T.Text -> Either ParseError Term
 parse s = runParser form () sourceName1 (T.unpack s)
   where
+      boolean = do
+        st <- string "true" <|> string "false"
+        return $ B (st == "true")
       stringLiteral = do
           string "\""
           word <- T.pack <$> many1 (noneOf "\"")
@@ -30,8 +33,8 @@ parse s = runParser form () sourceName1 (T.unpack s)
           value <- form
           return (label, value)
       tableLiteral = Rec <$> (between (char '{') (char '}') $ labelledValuePair `sepBy` (char ','))
-      form =
-          int
+      form = boolean
+          <|> int
           <|> stringLiteral
           <|> tableLiteral
           <|> closed
@@ -56,7 +59,3 @@ parse s = runParser form () sourceName1 (T.unpack s)
           spaces
           char ')'
           return x
-           
-
-
-

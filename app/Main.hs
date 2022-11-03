@@ -15,7 +15,7 @@ import qualified Data.Map as Map
 import Parser
 import System.Console.Haskeline
 
- 
+
 main :: IO ()
 main = runInputT defaultSettings repl
 
@@ -34,10 +34,9 @@ repl = do
             outputStrLn . show $ form
             let types = typeInference form
             case types of
-              Left e -> 
+              Left e ->
                   outputStrLn . show $ e
               Right (t, s) -> do
-                  outputStrLn . show $ t
-                  outputStrLn . show $ s
+                  outputStrLn . T.unpack . pp $ t
                   outputStrLn . show $ run interpret (initialState form)
             repl

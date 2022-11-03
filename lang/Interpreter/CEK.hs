@@ -74,6 +74,15 @@ interpret = do
           kontinuation <.= k
           interpret
         otherwise -> throwError $ "not a function: " <> (T.pack . show $ int)
+    (B bool) ->
+      case curr ^. kontinuation of
+        Terminate -> return $ VBool bool
+        Function (Lam v b) env k  -> do
+          control <.= b
+          environment <.= extend v (VBool bool) env
+          kontinuation <.= k
+          interpret
+        otherwise -> throwError $ "not a function: " <> (T.pack . show $ bool)
     (S t) ->
       case curr ^. kontinuation of
         Terminate -> return $ VText t
@@ -95,6 +104,9 @@ interpret = do
            interpret
          Just (VText v) -> do
            control <.= S v
+           interpret
+         Just (VBool b) -> do
+           control <.= B b
            interpret
          Just (VTable _) -> throwError "unimplemented"
            

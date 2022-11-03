@@ -10,6 +10,7 @@ import Data.Term.Term
 data Value
   = VInt Int
   | VText T.Text
+  | VBool Bool
   | VTable [(T.Text, Value)]
   | Closure T.Text Term (Map.Map T.Text Value)
   deriving (Eq, Show)

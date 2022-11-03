@@ -6,6 +6,7 @@ import Control.Lens.TH
 
 data Term
   = I Int
+  | B Bool
   | S T.Text
   | Var T.Text
   | Lam T.Text Term

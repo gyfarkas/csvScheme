@@ -118,6 +118,7 @@ ti (TypeEnv env) (Var n) =
           return (nullSubst,t)
 ti env (S l) = pure (nullSubst, TString)
 ti env (I l) = pure (nullSubst, TInt)
+ti env (B l) = pure (nullSubst, TBool)
 
 ti env (Rec l) = throwError "unimplemented" --  pure (nullSubst, TRec)
 ti env (Lam n e) = do
