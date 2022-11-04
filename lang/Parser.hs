@@ -31,7 +31,7 @@ parse s = runParser form () sourceName1 (T.unpack s)
           string ":"
           spaces
           value <- form
-          return (label, value)
+          return (Label label, value)
       tableLiteral = Rec <$> (between (char '{') (char '}') $ labelledValuePair `sepBy` (char ','))
       form = boolean
           <|> int

@@ -4,6 +4,8 @@ module Data.Term.Term where
 import qualified Data.Text as T
 import Control.Lens.TH
 
+newtype Label = Label {unLabel :: T.Text} deriving (Eq, Show)
+
 data Term
   = I Int
   | B Bool
@@ -11,7 +13,7 @@ data Term
   | Var T.Text
   | Lam T.Text Term
   | App Term Term
-  | Rec [(T.Text, Term)]
+  | Rec [(Label, Term)]
   deriving (Eq, Show)
 
 makePrisms ''Term

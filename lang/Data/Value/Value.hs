@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 module Data.Value.Value where
 
 import Control.Lens.TH
@@ -11,7 +12,7 @@ data Value
   = VInt Int
   | VText T.Text
   | VBool Bool
-  | VTable [(T.Text, Value)]
+  | VRow [(Label, Value)]
   | Closure T.Text Term (Map.Map T.Text Value)
   deriving (Eq, Show)
 

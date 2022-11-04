@@ -1,6 +1,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
-
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Interpreter.TypeCheck where
 import Control.Monad
 import Control.Monad.State
@@ -43,6 +45,7 @@ instance Typeable Ty where
     freeVars (TFn t1 t2) = freeVars t1 `Set.union` freeVars t2
     freeVars (TRecord _ fieldTypes) = foldr (Set.union . freeVars . snd) Set.empty fieldTypes
     apply subst (TFn a b) = TFn (apply subst a) (apply subst b)
+    apply subst (TRecord n ts) = TRecord n $ fmap (\(l, t) -> (l, ) . (apply subst) $ t) ts
     apply subst (TVar a) = case Map.lookup a subst of
        Nothing -> TVar a
        Just t -> t
@@ -96,6 +99,13 @@ unify (TVar u) t = varBind u t
 unify t (TVar u) = varBind u t
 unify TInt TInt = return nullSubst
 unify TBool TBool = return nullSubst
+unify (TRecord n ts) (TRecord n2 ts') =
+    if n == n2
+    then folding nullSubst $ zip (fmap snd ts) (fmap snd ts')
+    else throwError $ "record " <> n <> " and record " <> n2 <> " do not unify"
+  where folding =  foldM $ \subst (t1, t2) -> do
+          subst' <- unify t1 t2
+          return $ composeSubst subst subst'
 unify t1 t2 =
     throwError $ "types do not unify: "
       <> (T.pack . show $ t1)
@@ -115,12 +125,22 @@ ti (TypeEnv env) (Var n) =
       Nothing -> throwError $ "unbound variable: " <> n
       Just sigma -> do
           t <- instantiate sigma
-          return (nullSubst,t)
+          return (nullSubst, t)
 ti env (S l) = pure (nullSubst, TString)
 ti env (I l) = pure (nullSubst, TInt)
 ti env (B l) = pure (nullSubst, TBool)
 
-ti env (Rec l) = throwError "unimplemented" --  pure (nullSubst, TRec)
+ti env (Rec ts) = do
+    (subst, typeList) <- folding (nullSubst, []) ts
+    let r = TRecord "anon_placeholder" typeList
+    return (subst, r)
+  where
+    folding :: (Subst, [(Label, Ty)]) -> [(Label, Term)] -> MTypecheck (Subst, [(Label, Ty)])  =
+      foldM $ \(subst, ts) (l, term) -> do
+        (subst', t') <- ti env term
+        let subst'' = composeSubst subst subst'
+        let labelledTypes = ts ++ [(l, t')]
+        return (subst'', labelledTypes)
 ti env (Lam n e) = do
     tv <- newTyVar "a"
     let TypeEnv env' = remove env n

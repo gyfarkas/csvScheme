@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Interpreter.CEK where
 
@@ -94,23 +95,9 @@ interpret = do
         otherwise -> throwError $ "not a function: " <> (T.pack . show $ t)
     (Var n) -> do
        case (Map.lookup n (curr ^. environment ^. bindings)) of
-         Just (Closure v b e) -> do
-           control <.= Lam v b
-           let ctx = (curr ^. environment) & set bindings e
-           environment <.= ctx
-           interpret
-         Just (VInt v) -> do
-           control <.= I v
-           interpret
-         Just (VText v) -> do
-           control <.= S v
-           interpret
-         Just (VBool b) -> do
-           control <.= B b
-           interpret
-         Just (VTable _) -> throwError "unimplemented"
-           
+         Just v -> interpretWithValue v
          Nothing -> throwError $ "unbound variable: " <> n
+
     (App f x) -> do
        control <.= f
        kontinuation <.= Argument x (curr ^. environment) (curr ^. kontinuation)
@@ -131,11 +118,11 @@ interpret = do
         interpret
 
     (Rec rows) -> case curr ^. kontinuation of
-        Terminate -> VTable <$> mapM interpretInner rows
+        Terminate -> VRow <$> mapM interpretInner rows
         Function (Lam v b) env k  -> do
           t <- mapM interpretInner rows
           control <.= b
-          environment <.= extend v (VTable t) env
+          environment <.= extend v (VRow t) env
           kontinuation <.= k
           interpret
         otherwise -> throwError $ "not a function: " <> (T.pack . show $ rows)
@@ -144,9 +131,25 @@ interpret = do
      control <.= term
      v <- interpret
      return (label, v)
-
-
-         
+   interpretWithValue = \case
+     (Closure v b e) -> do
+       curr <- get
+       control <.= Lam v b
+       let ctx = (curr ^. environment) & set bindings e
+       environment <.= ctx
+       interpret
+     (VInt v) -> do
+       control <.= I v
+       interpret
+     (VText v) -> do
+       control <.= S v
+       interpret
+     (VBool b) -> do
+       control <.= B b
+       interpret
+     r@(VRow values) -> do
+       forM_ values $ \(_, v) -> interpretWithValue v
+       interpret
 
 run :: MInterpret a -> InterpreterState -> Either T.Text (a, InterpreterState)
 run s = (runExcept . runStateT s)
