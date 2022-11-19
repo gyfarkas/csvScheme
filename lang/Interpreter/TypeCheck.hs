@@ -21,7 +21,7 @@ data TypeScheme =
   TypeScheme {
       _free :: [T.Text]
     , _ty :: Ty }
-makeLenses ''TypeScheme 
+makeLenses ''TypeScheme
 
 -- substitution variable to type
 type Subst = Map.Map T.Text Ty
@@ -80,7 +80,7 @@ newTyVar :: T.Text -> MTypecheck Ty
 newTyVar prefix = do
   c <- tiCounter <+= 1
   return (TVar (prefix <> (T.pack . show $ c)))
-  
+
 instantiate :: TypeScheme -> MTypecheck Ty
 instantiate (TypeScheme vars t) = do
   nvars <- mapM (\_ -> newTyVar "a") vars
@@ -129,7 +129,6 @@ ti (TypeEnv env) (Var n) =
 ti env (S l) = pure (nullSubst, TString)
 ti env (I l) = pure (nullSubst, TInt)
 ti env (B l) = pure (nullSubst, TBool)
-
 ti env (Rec ts) = do
     (subst, typeList) <- folding (nullSubst, []) ts
     let r = TRecord "anon_placeholder" typeList
@@ -155,6 +154,13 @@ ti env (App e1 e2) = do
     let f = s3 `composeSubst` s2 `composeSubst` s1
     typeAssignments <.= f
     return (f, apply s3 tv)
+ti env (BuiltIn (Plus i1 i2)) = do
+    (s1, t1) <- ti env i1
+    (s2, t2) <- ti (apply s1 env) i2
+    s1' <- unify TInt t1
+    s2' <- unify TInt t2
+    return (s1' `composeSubst` s2', TInt)
+ti env (BuiltIn _) = throwError "unimplemented"
 
 runTypecheck :: TypeState -> ((MTypecheck a) ->  Either T.Text (a, TypeState))
 runTypecheck s = (runExcept . (flip runStateT s))
@@ -163,4 +169,3 @@ typeInference :: Term -> Either T.Text (Ty, TypeState)
 typeInference e = runTypecheck emptyTypeState $ do
     (s,t) <- ti (TypeEnv Map.empty) e
     return (apply s t)
-

@@ -126,6 +126,20 @@ interpret = do
           kontinuation <.= k
           interpret
         otherwise -> throwError $ "not a function: " <> (T.pack . show $ rows)
+    (BuiltIn (Plus l r)) -> do
+          l1 <- do
+            control <.= l
+            interpret
+          l2 <- do
+            control <.= r
+            interpret
+          let fv = \case
+                ((VInt i1), (VInt i2)) -> do
+                    control <.= I (i1 + i2)
+                    interpret
+                _ -> throwError "invalid arguments to plus"
+          fv (l1, l2)
+    (BuiltIn _) -> throwError "not implemented:"
  where
    interpretInner (label, term) = do
      control <.= term

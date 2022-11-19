@@ -1,0 +1,38 @@
+\documentclass{amsart}
+
+\begin{document}
+  \section{Introduction}
+The goal is to build a domain specific language for large scale data
+manipulation, that helps reasoning about the behaviour of data,
+specificly the data operations as implemented in spark. This is
+different from simple embedded DSLs that would target to make reading
+and writing data manipulations easier. However still do not aim for
+the strongest and broadest possible language, instead it is targeting
+to find a strong enough language that can exclude ill-behaving
+prodrams, that would cost too much, but still be relatively cheap to
+implement and use. That I think exlude highly complicated fully
+dependent typed languages (idris) and probably all too general
+programming languages (haskell or scala) that might be capable to
+achieve it with all bells and whistles they have as a type system and
+extension, but not being specific to the problem makes solutions
+unnecessarily complicated.
+
+The work introduces two independently well studied typing concepts and
+tries to make them work interconnected.
+\begin{itemize}
+  \item row types, and extensible records
+  \item linear types, and resoure tracking in types
+  \end{itemize}
+
+  \section{Rows}
+  \section{Linear types}
+  \section{the csv language implementation}
+  \section{generating spark programs}
+  \section{Closing remarks}
+
+\end{document}
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:

@@ -52,10 +52,18 @@ parse s = runParser form () sourceName1 (T.unpack s)
           spaces
           y <- form
           return $ App x y
+      add = do
+        spaces
+        char '+'
+        spaces
+        f1 <- form
+        spaces
+        f2 <- form
+        return . BuiltIn $ (Plus f1 f2)
       closed = do
           char '('
           spaces
-          x <- fun <|> app
+          x <- fun <|> app <|> add
           spaces
           char ')'
           return x

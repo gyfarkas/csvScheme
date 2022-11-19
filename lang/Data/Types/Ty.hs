@@ -17,7 +17,6 @@ data Ty
 
 makePrisms ''Ty
 
-
 pp :: Ty -> T.Text
 pp TInt = "Int"
 pp TString = "String"
