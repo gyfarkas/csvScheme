@@ -160,7 +160,29 @@ ti env (BuiltIn (Plus i1 i2)) = do
     s1' <- unify TInt t1
     s2' <- unify TInt t2
     return (s1' `composeSubst` s2', TInt)
-ti env (BuiltIn _) = throwError "unimplemented"
+ti env (BuiltIn (Extend (l, t) r)) = do
+  (s1, t1) <- ti env t
+  (s2, tr) <- ti env r
+  case tr of
+    TRecord n typeList ->
+      return (s1 `composeSubst` s2, TRecord n ((l,t1):(filter (not . (== l) . fst) typeList)))
+    _ -> throwError "cannot extend non-recordType"
+ti env (BuiltIn (Remove l r)) = do
+  (s, tr) <- ti env r
+  case tr of
+    TRecord n typeList ->
+      return (s, TRecord n (filter (not . (== l) . fst) typeList))
+ti env (BuiltIn (Project l r)) = do
+  (s1, tr) <- ti env r
+  case tr of
+    TRecord _ typeList -> do
+      let labels = T.pack . show $ (unLabel . fst) <$> typeList
+      case lookup l typeList of
+        Nothing -> throwError $ "invalid record label " <> (unLabel l) <> "valid labels: " <> labels
+        Just t -> return (s1, t)
+    _ -> throwError "invalid projection from non-record type"
+
+
 
 runTypecheck :: TypeState -> ((MTypecheck a) ->  Either T.Text (a, TypeState))
 runTypecheck s = (runExcept . (flip runStateT s))

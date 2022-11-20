@@ -60,10 +60,39 @@ parse s = runParser form () sourceName1 (T.unpack s)
         spaces
         f2 <- form
         return . BuiltIn $ (Plus f1 f2)
+      project = do
+        spaces
+        char '.'
+        spaces
+        l <- T.pack <$> many1 letter
+        spaces
+        f <- form
+        spaces
+        return . BuiltIn $ (Project (Label l) f)
+      remove = do
+        spaces
+        string "<<"
+        spaces
+        l <- T.pack <$> many1 letter
+        spaces
+        f <- form
+        spaces
+        return . BuiltIn $ (Remove (Label l) f)
+      extend = do
+        spaces
+        string ">>"
+        spaces
+        l <- T.pack <$> many1 letter
+        spaces
+        f <- form
+        spaces
+        r <- form
+        spaces
+        return . BuiltIn $ (Extend ((Label l), f)  r)
       closed = do
           char '('
           spaces
-          x <- fun <|> app <|> add
+          x <- fun <|> app <|> add <|> project <|> remove <|> extend
           spaces
           char ')'
           return x

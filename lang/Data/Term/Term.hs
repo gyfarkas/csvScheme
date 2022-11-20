@@ -10,6 +10,8 @@ newtype Label = Label {unLabel :: T.Text} deriving (Eq, Show)
 data BuiltInFn
   = Plus Term Term
   | Project Label Term
+  | Remove Label Term
+  | Extend (Label, Term) Term
   deriving (Eq, Show)
 
 data Term

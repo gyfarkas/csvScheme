@@ -40,7 +40,18 @@ data Kont
   = Terminate
   | Argument Term Environment Kont
   | Function Term Environment Kont
+  | Projection Label Environment Kont
+  | Extension (Label, Term) Environment Kont
+  | Removal Label Environment Kont
   deriving (Eq, Show)
+
+{--
+   (. a (. b {b:{a:1}})) e k ->
+   -> (. b {b: {a:1}}) e (Project a k)
+   -> {b: {a:1}} e (Project b e (Project a e k))
+  -> (lookup b {b: {a:1}})={a:1} (Project a e k)
+  -> (lookup a {a:1}=1) e k
+-}
 
 data InterpreterState
   = InterpreterState
@@ -104,7 +115,6 @@ interpret = do
        interpret
 
     (Lam arg term) -> case curr ^. kontinuation of
-      Terminate -> return $ Closure arg term (curr ^. environment ^. bindings)
       Argument term' ctx' k' -> do
         control <.= term'
         kontinuation <.= Function (Lam arg term) (curr ^. environment) k'
@@ -116,9 +126,26 @@ interpret = do
         kontinuation <.= k'
         environment <.= extend arg' (Closure arg term e) ctx'
         interpret
+      Terminate  -> return $ Closure arg term (curr ^. environment ^. bindings)
+
 
     (Rec rows) -> case curr ^. kontinuation of
         Terminate -> VRow <$> mapM interpretInner rows
+        Extension (l, v) env k -> do
+          control <.= Rec ((l,v):(filter (not . (== l) . fst) rows))
+          kontinuation <.= k
+          interpret
+        Removal l env k -> do
+          control <.= Rec (filter (not . (== l) . fst) rows)
+          kontinuation <.= k
+          interpret
+        Projection l env k -> do
+          case lookup l rows of
+            Nothing -> throwError $ "invalid record label: " <> (unLabel l)
+            Just v -> do
+              control <.= v
+              kontinuation <.= k
+              interpret
         Function (Lam v b) env k  -> do
           t <- mapM interpretInner rows
           control <.= b
@@ -139,8 +166,19 @@ interpret = do
                     interpret
                 _ -> throwError "invalid arguments to plus"
           fv (l1, l2)
-    (BuiltIn _) -> throwError "not implemented:"
- where
+    (BuiltIn (Extend (l, v) r)) -> do
+          control <.= r
+          kontinuation <.= Extension (l, v) (curr ^. environment) (curr ^. kontinuation)
+          interpret
+    (BuiltIn (Remove l r)) -> do
+          control <.= r
+          kontinuation <.= Removal l (curr ^. environment) (curr ^. kontinuation)
+          interpret
+    (BuiltIn (Project l r)) -> do
+          control <.= r
+          kontinuation <.= Projection l (curr ^. environment) (curr ^. kontinuation)
+          interpret
+  where
    interpretInner (label, term) = do
      control <.= term
      v <- interpret
