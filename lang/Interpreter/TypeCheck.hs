@@ -100,12 +100,18 @@ unify t (TVar u) = varBind u t
 unify TInt TInt = return nullSubst
 unify TBool TBool = return nullSubst
 unify (TRecord n ts) (TRecord n2 ts') =
-    if n == n2
-    then folding nullSubst $ zip (fmap snd ts) (fmap snd ts')
-    else throwError $ "record " <> n <> " and record " <> n2 <> " do not unify"
-  where folding =  foldM $ \subst (t1, t2) -> do
-          subst' <- unify t1 t2
-          return $ composeSubst subst subst'
+    merge nullSubst ts ts'
+  where
+         merge :: Subst -> [(Label, Ty)] -> [(Label, Ty)] -> MTypecheck Subst
+         merge s [] [] = return s
+         merge s ((l1,t1):ts) ((l2,t2):ts') =
+           if l1 == l2
+           then do
+             s' <- unify t1 t2
+             merge (composeSubst s s') ts ts'
+           else merge s ts ((l2,t2):ts')
+         merge s [] ts' = throwError "records do not unify"
+         merge s ts [] = return s
 unify t1 t2 =
     throwError $ "types do not unify: "
       <> (T.pack . show $ t1)
@@ -180,7 +186,11 @@ ti env (BuiltIn (Project l r)) = do
       case lookup l typeList of
         Nothing -> throwError $ "invalid record label " <> (unLabel l) <> "valid labels: " <> labels
         Just t -> return (s1, t)
-    _ -> throwError "invalid projection from non-record type"
+    other -> do
+      tv <- newTyVar "a"
+      s2 <- unify other (TRecord "anon_placeholder" [(l, tv)])
+      return (s1 `composeSubst` s2, apply s2 tv)
+    -- _ -> throwError "invalid projection from non-record type"
 
 
 
