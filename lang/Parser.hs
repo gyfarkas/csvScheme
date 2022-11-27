@@ -59,7 +59,7 @@ parse s = runParser form () sourceName1 (T.unpack s)
         f1 <- form
         spaces
         f2 <- form
-        return . BuiltIn $ (Plus f1 f2)
+        return $ App (App (BuiltIn $ (Plus f1 f2)) f1) f2
       project = do
         spaces
         char '.'
@@ -68,7 +68,7 @@ parse s = runParser form () sourceName1 (T.unpack s)
         spaces
         f <- form
         spaces
-        return . BuiltIn $ (Project (Label l) f)
+        return $ App (BuiltIn $ (Project (Label l) f)) f
       remove = do
         spaces
         string "<<"
@@ -77,7 +77,7 @@ parse s = runParser form () sourceName1 (T.unpack s)
         spaces
         f <- form
         spaces
-        return . BuiltIn $ (Remove (Label l) f)
+        return $ App (BuiltIn $ (Remove (Label l) f)) f
       extend = do
         spaces
         string ">>"
@@ -88,7 +88,7 @@ parse s = runParser form () sourceName1 (T.unpack s)
         spaces
         r <- form
         spaces
-        return . BuiltIn $ (Extend ((Label l), f)  r)
+        return $ App (App (BuiltIn $ (Extend ((Label l), f)  r)) f) r
       closed = do
           char '('
           spaces

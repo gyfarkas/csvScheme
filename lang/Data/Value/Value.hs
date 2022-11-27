@@ -1,5 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Data.Value.Value where
 
 import Control.Lens.TH
@@ -17,3 +19,7 @@ data Value
   deriving (Eq, Show)
 
 makePrisms ''Value
+
+ppValue = \case
+  Closure _ _ _ -> "Closure"
+  t -> T.pack . show $ t

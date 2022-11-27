@@ -3,6 +3,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
 module Interpreter.TypeCheck where
 import Control.Monad
 import Control.Monad.State
@@ -43,9 +44,12 @@ instance Typeable Ty where
     freeVars (TString)  = Set.empty
     freeVars (TBool) = Set.empty
     freeVars (TFn t1 t2) = freeVars t1 `Set.union` freeVars t2
-    freeVars (TRecord _ fieldTypes) = foldr (Set.union . freeVars . snd) Set.empty fieldTypes
+    freeVars (TRecord row) = freeVars row
+    freeVars (EmptyRow) = Set.empty
+    freeVars (ExtendRow (l, t) r) = freeVars t `Set.union` freeVars r
     apply subst (TFn a b) = TFn (apply subst a) (apply subst b)
-    apply subst (TRecord n ts) = TRecord n $ fmap (\(l, t) -> (l, ) . (apply subst) $ t) ts
+    apply s (TRecord t) = TRecord (apply s t)
+    apply s (ExtendRow (l, t) r) = ExtendRow (l, (apply s t)) (apply s r)
     apply subst (TVar a) = case Map.lookup a subst of
        Nothing -> TVar a
        Just t -> t
@@ -99,24 +103,58 @@ unify (TVar u) t = varBind u t
 unify t (TVar u) = varBind u t
 unify TInt TInt = return nullSubst
 unify TBool TBool = return nullSubst
-unify (TRecord n ts) (TRecord n2 ts') =
-    merge nullSubst ts ts'
-  where
-         merge :: Subst -> [(Label, Ty)] -> [(Label, Ty)] -> MTypecheck Subst
-         merge s [] [] = return s
-         merge s ((l1,t1):ts) ((l2,t2):ts') =
-           if l1 == l2
-           then do
-             s' <- unify t1 t2
-             merge (composeSubst s s') ts ts'
-           else merge s ts ((l2,t2):ts')
-         merge s [] ts' = throwError "records do not unify"
-         merge s ts [] = return s
+-- records are unifieable
+-- when forall label in r1 is in r2 and have unifieable type.
+unify (TRecord row1) (TRecord row2) = unify row1 row2
+unify EmptyRow EmptyRow = return nullSubst
+unify (ExtendRow (label1, fieldTy1) rowTail1) row2@ExtendRow{} = do
+  (fieldTy2, rowTail2, theta1) <- rewriteRow row2 label1
+  -- ^ apply side-condition to ensure termination
+  case snd $ typeToList rowTail1 of
+    Just tv | Map.member tv theta1 -> throwError "recursive row type"
+    _ -> do
+      theta2 <- unify (apply theta1 fieldTy1) (apply theta1 fieldTy2)
+      let s = theta2 `composeSubst` theta1
+      theta3 <- unify (apply s rowTail1) (apply s rowTail2)
+      return $ theta3 `composeSubst` s
+-- unify (TRecord ts) (TRecord ts') =
+--    merge nullSubst ts ts'
+--  where
+--         merge :: Subst -> Row -> Row -> MTypecheck Subst
+--         merge s EmptyRow EmptyRow = return s
+--         merge s (ExtendRow (l1,t1) ts) (ExtendRow (l2,t2) ts') =
+--           if l1 == l2
+--           then do
+--             s' <- unify t1 t2
+--             merge (composeSubst s s') ts ts'
+--           else merge s ts (ExtendRow (l2,t2) ts')
+--         merge s EmptyRow ts' = return s -- throwError "records do not unify"
+--         merge s ts EmptyRow = return s
 unify t1 t2 =
     throwError $ "types do not unify: "
       <> (T.pack . show $ t1)
       <> " vs. "
       <> (T.pack . show $ t2)
+
+
+rewriteRow :: Ty -> Label -> MTypecheck (Ty, Ty, Subst)
+rewriteRow EmptyRow newLabel = throwError $ "label " <> (unLabel newLabel) <> " cannot be inserted"
+rewriteRow (ExtendRow (label, fieldTy) rowTail) newLabel
+  | newLabel == label = return (fieldTy, rowTail, nullSubst) -- ^ nothing to do
+  | TVar alpha <- rowTail = do
+      beta  <- newTyVar "r"
+      gamma <- newTyVar "a"
+      return ( gamma
+             , ExtendRow (label, fieldTy) beta
+             , Map.singleton alpha $ ExtendRow (newLabel, gamma) beta
+             )
+  | otherwise   = do
+      (fieldTy', rowTail', s) <- rewriteRow rowTail newLabel
+      return ( fieldTy'
+             , ExtendRow (label, fieldTy) rowTail'
+             , s
+             )
+rewriteRow ty _ = throwError $ "Unexpected type: " <> (T.pack . show $ ty)
 
 varBind :: T.Text -> Ty -> MTypecheck Subst
 varBind u t
@@ -137,9 +175,13 @@ ti env (I l) = pure (nullSubst, TInt)
 ti env (B l) = pure (nullSubst, TBool)
 ti env (Rec ts) = do
     (subst, typeList) <- folding (nullSubst, []) ts
-    let r = TRecord "anon_placeholder" typeList
+    let r = TRecord . listToRow $ typeList
     return (subst, r)
   where
+    listToRow :: [(Label, Ty)] -> Ty
+    listToRow [] = EmptyRow
+    listToRow ((l, t):xs) = ExtendRow (l,t) (listToRow xs)
+
     folding :: (Subst, [(Label, Ty)]) -> [(Label, Term)] -> MTypecheck (Subst, [(Label, Ty)])  =
       foldM $ \(subst, ts) (l, term) -> do
         (subst', t') <- ti env term
@@ -160,39 +202,26 @@ ti env (App e1 e2) = do
     let f = s3 `composeSubst` s2 `composeSubst` s1
     typeAssignments <.= f
     return (f, apply s3 tv)
-ti env (BuiltIn (Plus i1 i2)) = do
-    (s1, t1) <- ti env i1
-    (s2, t2) <- ti (apply s1 env) i2
-    s1' <- unify TInt t1
-    s2' <- unify TInt t2
-    return (s1' `composeSubst` s2', TInt)
-ti env (BuiltIn (Extend (l, t) r)) = do
-  (s1, t1) <- ti env t
-  (s2, tr) <- ti env r
-  case tr of
-    TRecord n typeList ->
-      return (s1 `composeSubst` s2, TRecord n ((l,t1):(filter (not . (== l) . fst) typeList)))
-    _ -> throwError "cannot extend non-recordType"
-ti env (BuiltIn (Remove l r)) = do
-  (s, tr) <- ti env r
-  case tr of
-    TRecord n typeList ->
-      return (s, TRecord n (filter (not . (== l) . fst) typeList))
-ti env (BuiltIn (Project l r)) = do
-  (s1, tr) <- ti env r
-  case tr of
-    TRecord _ typeList -> do
-      let labels = T.pack . show $ (unLabel . fst) <$> typeList
-      case lookup l typeList of
-        Nothing -> throwError $ "invalid record label " <> (unLabel l) <> "valid labels: " <> labels
-        Just t -> return (s1, t)
-    other -> do
-      tv <- newTyVar "a"
-      s2 <- unify other (TRecord "anon_placeholder" [(l, tv)])
-      return (s1 `composeSubst` s2, apply s2 tv)
-    -- _ -> throwError "invalid projection from non-record type"
-
-
+ti env (BuiltIn (Plus i1 i2)) =
+    return $ (nullSubst, TFn TInt (TFn TInt TInt))
+ti env (BuiltIn (Project label r)) = do
+    a <- newTyVar "a"
+    rv <- newTyVar "r"
+    return $ (nullSubst, TFn (TRecord $ ExtendRow (label, a) rv) a)
+ti env (BuiltIn (Extend (label, v) r)) = do
+    a <- newTyVar "a"
+    rv <- newTyVar "r"
+    return $ (nullSubst, TFn a (TFn (TRecord rv) (TRecord $ ExtendRow (label, a) rv)))
+ti env (BuiltIn (Remove label r)) = do
+    a <- newTyVar "a"
+    rv <- newTyVar "r"
+    return $ (nullSubst, TFn (TRecord $ ExtendRow (label, a) rv) (TRecord rv))
+findLabel :: Label -> Ty -> Maybe Ty
+findLabel l (TRecord row) = findLabel l row
+findLabel l (ExtendRow (l', t) r)
+  | l' == l = Just t
+  | otherwise = findLabel l r
+findLabel l t = Nothing
 
 runTypecheck :: TypeState -> ((MTypecheck a) ->  Either T.Text (a, TypeState))
 runTypecheck s = (runExcept . (flip runStateT s))

@@ -40,9 +40,6 @@ data Kont
   = Terminate
   | Argument Term Environment Kont
   | Function Term Environment Kont
-  | Projection Label Environment Kont
-  | Extension (Label, Term) Environment Kont
-  | Removal Label Environment Kont
   deriving (Eq, Show)
 
 {--
@@ -106,7 +103,7 @@ interpret = do
         otherwise -> throwError $ "not a function: " <> (T.pack . show $ t)
     (Var n) -> do
        case (Map.lookup n (curr ^. environment ^. bindings)) of
-         Just v -> interpretWithValue v
+         Just v -> return v
          Nothing -> throwError $ "unbound variable: " <> n
 
     (App f x) -> do
@@ -126,82 +123,71 @@ interpret = do
         kontinuation <.= k'
         environment <.= extend arg' (Closure arg term e) ctx'
         interpret
-      Terminate  -> return $ Closure arg term (curr ^. environment ^. bindings)
-
-
-    (Rec rows) -> case curr ^. kontinuation of
-        Terminate -> VRow <$> mapM interpretInner rows
-        Extension (l, v) env k -> do
-          control <.= Rec ((l,v):(filter (not . (== l) . fst) rows))
-          kontinuation <.= k
-          interpret
-        Removal l env k -> do
-          control <.= Rec (filter (not . (== l) . fst) rows)
-          kontinuation <.= k
-          interpret
-        Projection l env k -> do
-          case lookup l rows of
-            Nothing -> throwError $ "invalid record label: " <> (unLabel l)
-            Just v -> do
-              control <.= v
-              kontinuation <.= k
-              interpret
+      Terminate -> return $ Closure arg term (curr ^. environment ^. bindings)
+    (Rec row) -> case curr ^. kontinuation of
+        Terminate -> VRow <$> mapM (interpretInner $ curr ^. environment) row
         Function (Lam v b) env k  -> do
-          t <- mapM interpretInner rows
+          t <- mapM (interpretInner env) row
           control <.= b
           environment <.= extend v (VRow t) env
           kontinuation <.= k
           interpret
-        otherwise -> throwError $ "not a function: " <> (T.pack . show $ rows)
-    (BuiltIn (Plus l r)) -> do
-          l1 <- do
-            control <.= l
-            interpret
-          l2 <- do
-            control <.= r
-            interpret
-          let fv = \case
-                ((VInt i1), (VInt i2)) -> do
-                    control <.= I (i1 + i2)
-                    interpret
-                _ -> throwError "invalid arguments to plus"
-          fv (l1, l2)
-    (BuiltIn (Extend (l, v) r)) -> do
-          control <.= r
-          kontinuation <.= Extension (l, v) (curr ^. environment) (curr ^. kontinuation)
-          interpret
-    (BuiltIn (Remove l r)) -> do
-          control <.= r
-          kontinuation <.= Removal l (curr ^. environment) (curr ^. kontinuation)
-          interpret
-    (BuiltIn (Project l r)) -> do
-          control <.= r
-          kontinuation <.= Projection l (curr ^. environment) (curr ^. kontinuation)
-          interpret
+        otherwise -> throwError $ "not a function: " <> (T.pack . show $ row)
+    BuiltIn b -> builtInEval b
+
   where
-   interpretInner (label, term) = do
-     control <.= term
-     v <- interpret
+   interpretInner :: Environment -> (Label, Term) -> MInterpret (Label, Value)
+   interpretInner env (label, term) = do
+     curr <- get
+     v <- evalToValue term env
      return (label, v)
-   interpretWithValue = \case
-     (Closure v b e) -> do
+
+   valToTerm :: Value -> Term
+   valToTerm = \case
+     (Closure v b e) ->
+       Lam v b -- danger should save the environment somehow
+     (VInt v) -> I v
+     (VText v) -> S v
+     (VBool b) -> B b
+     (VRow values) ->
+       Rec $ (\(l, v) -> (l, valToTerm v)) <$> values
+   evalToValue :: Term -> Environment -> MInterpret Value
+   evalToValue e env = do
+     control <.= e
+     environment <.= env
+     kontinuation <.= Terminate
+     interpret
+
+   builtInEval :: BuiltInFn -> MInterpret Value
+   builtInEval b = case b of
+     Plus l r -> do
        curr <- get
-       control <.= Lam v b
-       let ctx = (curr ^. environment) & set bindings e
-       environment <.= ctx
-       interpret
-     (VInt v) -> do
-       control <.= I v
-       interpret
-     (VText v) -> do
-       control <.= S v
-       interpret
-     (VBool b) -> do
-       control <.= B b
-       interpret
-     r@(VRow values) -> do
-       forM_ values $ \(_, v) -> interpretWithValue v
-       interpret
+       lv <- evalToValue l (curr ^. environment)
+       rv <- evalToValue r (curr ^. environment)
+       case (lv, rv) of
+         (VInt x, VInt y) -> return $ VInt (x + y)
+         _ -> throwError "invalid plus arguments"
+     Extend (l,v) r -> do
+       curr <- get
+       rc <- evalToValue r (curr ^. environment)
+       vv <- evalToValue v (curr ^. environment)
+       case rc of
+         (VRow fields) -> return . VRow $ (l,vv):fields
+         x -> throwError $ "invalid extension base" <> (T.pack . show $ x)
+     Remove l r -> do
+       curr <- get
+       rc <- evalToValue r (curr ^.environment)
+       case rc of
+         (VRow fields) -> return . VRow $ filter ((/= l) . fst) fields
+         x -> throwError $ "invalid removal base" <> (T.pack . show $ x)
+     Project l r -> do
+       curr <- get
+       rc <- evalToValue r (curr ^. environment)
+       case rc of
+         (VRow fields) -> do
+           v <-  maybe (throwError "invalid label") return (lookup l fields)
+           return $ v
+         x -> throwError $ "invalid projection base" <> (T.pack . show $ x)
 
 run :: MInterpret a -> InterpreterState -> Either T.Text (a, InterpreterState)
 run s = (runExcept . runStateT s)

@@ -1,6 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module Main where
 
@@ -33,11 +31,11 @@ repl = do
         Right form -> do
             let types = typeInference form
             case types of
-              Left e ->
+              Left e -> do
                   outputStrLn . show $ e
               Right (t, s) -> do
                   outputStrLn . T.unpack . pp $ t
                   case run interpret (initialState form) of
                     Left e -> outputStrLn . show $ e
-                    Right (v, s) -> outputStrLn . show $ v
+                    Right (v, s) -> outputStrLn . T.unpack . ppValue $ v
             repl
