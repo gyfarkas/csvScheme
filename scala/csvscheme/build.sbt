@@ -16,12 +16,18 @@ lazy val csvscheme =
     publish := {},
     publishLocal := {},
     scalaVersion := scala3Version,
-    libraryDependencies ++= Seq("org.typelevel" %% "cats-core" % "2.9.0")
+    libraryDependencies ++=
+      Seq(
+        "io.higherkindness" %% "droste-core" % "0.9.0",
+        "org.typelevel" %% "cats-core" % "2.9.0",
+        "org.typelevel" %% "cats-free" % "2.9.0",
+        "org.scalameta" %% "munit" % "0.7.29" % Test)
   ).
   jvmSettings(
     // Add JVM-specific settings here
     libraryDependencies ++=
       Seq(
+          "io.higherkindness" %% "droste-core" % "0.9.0",
           "org.typelevel" %% "cats-core" % "2.9.0",
           "org.typelevel" %% "cats-free" % "2.9.0",
           "org.scalameta" %% "munit" % "0.7.29" % Test)
