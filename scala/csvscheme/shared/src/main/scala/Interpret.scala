@@ -35,7 +35,7 @@ object Interpret:
     def alg: Algebra[ExprF, Env => EvalM[Value]] =
       Algebra((e: ExprF[Env => EvalM[Value]]) =>
         e match
-          case VarF(v) => env => env(v).value
+          case VarF(v)     => env => env(v).value
           case PrimF(prim) => env => EvalM.pure(evalPrim(prim))
           case LamF(v, body) =>
             env => EvalM.pure(Value.Closure(x => bind(env)(v, x).flatMap(body)))
@@ -53,8 +53,8 @@ object Interpret:
             }
           case LetF(name, defExpr, inExpr) =>
             (e: Env) =>
-              val t = defExpr(env).map(x => Thunk(x))
-              val newEnv = t.flatMap(t => bind(env)(name, t))
+              val t = defExpr(e).map(x => Thunk(x))
+              val newEnv = t.flatMap(t => bind(e)(name, t))
               newEnv.flatMap(e => inExpr(e))
       )
     def ev = scheme.cata(alg)
