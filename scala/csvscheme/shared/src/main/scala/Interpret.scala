@@ -25,6 +25,7 @@ object Interpret:
   enum Value:
     case I(int: Int)
     case Closure(f: Thunk => EvalM[Value])
+    case Rec(rs: Map[String, Value])
 
   type Env = Map[String, Thunk]
 
@@ -56,7 +57,12 @@ object Interpret:
               val t = defExpr(e).map(x => Thunk(x))
               val newEnv = t.flatMap(t => bind(e)(name, t))
               newEnv.flatMap(e => inExpr(e))
-      )
+          case RecordF(fields) => (e: Env) =>
+            val newFields = fields.foldLeft(EvalM.pure(Map.empty[String, Value])){
+              case (m, (l,v)) => v(e).flatMap(ve => m.map(_.updated(l, ve)))
+            }
+            newFields.map(Value.Rec(_))
+      ) // end Algebra
     def ev = scheme.cata(alg)
     ev(expr)(env)
 
@@ -70,6 +76,25 @@ object Interpret:
             case _ => EvalM.fail("invalid arguments to plus")
         }
       )
+    case Prim.Extend(label) => mkClosure2(v =>
+      r =>
+        (r, v) match
+          case (Value.Rec(rs), x) =>
+            EvalM.pure(Value.Rec(rs.updated(label, x)))
+          case _ => EvalM.fail("invalid extension base")
+    )
+
+    case Prim.Remove(label) => mkClosure(r =>
+      r match
+        case (Value.Rec(rs)) => EvalM.pure(Value.Rec(rs - label))
+        case _ => EvalM.fail("invalid removal")
+      )
+
+    case Prim.Project(label) => mkClosure(r =>
+       r match
+        case (Value.Rec(rs)) if rs.contains(label) => EvalM.pure(rs(label))
+        case _ => EvalM.fail(s"cannot project, $label is invalid ")
+    )
 
   def mkClosure2(f: Value => Value => EvalM[Value]): Value =
     mkClosure(x => EvalM.pure(mkClosure(y => f(x)(y))))

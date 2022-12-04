@@ -117,19 +117,6 @@ unify (ExtendRow (label1, fieldTy1) rowTail1) row2@ExtendRow{} = do
       let s = theta2 `composeSubst` theta1
       theta3 <- unify (apply s rowTail1) (apply s rowTail2)
       return $ theta3 `composeSubst` s
--- unify (TRecord ts) (TRecord ts') =
---    merge nullSubst ts ts'
---  where
---         merge :: Subst -> Row -> Row -> MTypecheck Subst
---         merge s EmptyRow EmptyRow = return s
---         merge s (ExtendRow (l1,t1) ts) (ExtendRow (l2,t2) ts') =
---           if l1 == l2
---           then do
---             s' <- unify t1 t2
---             merge (composeSubst s s') ts ts'
---           else merge s ts (ExtendRow (l2,t2) ts')
---         merge s EmptyRow ts' = return s -- throwError "records do not unify"
---         merge s ts EmptyRow = return s
 unify t1 t2 =
     throwError $ "types do not unify: "
       <> (T.pack . show $ t1)
@@ -138,7 +125,7 @@ unify t1 t2 =
 
 
 rewriteRow :: Ty -> Label -> MTypecheck (Ty, Ty, Subst)
-rewriteRow EmptyRow newLabel = throwError $ "label " <> (unLabel newLabel) <> " cannot be inserted"
+rewriteRow EmptyRow newLabel = throwError $ "label " <> unLabel newLabel <> " cannot be inserted"
 rewriteRow (ExtendRow (label, fieldTy) rowTail) newLabel
   | newLabel == label = return (fieldTy, rowTail, nullSubst) -- ^ nothing to do
   | TVar alpha <- rowTail = do
@@ -158,8 +145,8 @@ rewriteRow ty _ = throwError $ "Unexpected type: " <> (T.pack . show $ ty)
 
 varBind :: T.Text -> Ty -> MTypecheck Subst
 varBind u t
-  | t == (TVar u) = return nullSubst
-  | u `Set.member` (freeVars t) =
+  | t == TVar u = return nullSubst
+  | u `Set.member` freeVars t =
       throwError $ "occur check fails: " <> u <> " vs. " <> (T.pack . show $ t)
   | otherwise = return (Map.singleton u t)
 
@@ -191,7 +178,7 @@ ti env (Rec ts) = do
 ti env (Lam n e) = do
     tv <- newTyVar "a"
     let TypeEnv env' = remove env n
-        env'' = TypeEnv (env' `Map.union` (Map.singleton n (TypeScheme [] tv)))
+        env'' = TypeEnv (env' `Map.union` Map.singleton n (TypeScheme [] tv))
     (s1,t1) <- ti env'' e
     return (s1, TFn (apply s1 tv ) t1 )
 ti env (App e1 e2) = do
@@ -223,8 +210,8 @@ findLabel l (ExtendRow (l', t) r)
   | otherwise = findLabel l r
 findLabel l t = Nothing
 
-runTypecheck :: TypeState -> ((MTypecheck a) ->  Either T.Text (a, TypeState))
-runTypecheck s = (runExcept . (flip runStateT s))
+runTypecheck :: TypeState -> (MTypecheck a ->  Either T.Text (a, TypeState))
+runTypecheck s = runExcept . flip runStateT s
 
 typeInference :: Term -> Either T.Text (Ty, TypeState)
 typeInference e = runTypecheck emptyTypeState $ do

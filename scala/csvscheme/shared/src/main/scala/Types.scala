@@ -15,6 +15,9 @@ object Types:
     case TStringF[T]() extends TypeF[T]
     case TFnF[T](from: T, to: T) extends TypeF[T]
     case TVarF[T](name: String) extends TypeF[T]
+    case TEmptyRowF[T]() extends TypeF[T]
+    case TRowExtendF[T](label: String, v: T, rowTail: T) extends TypeF[T]
+    case TRecordF[T](row: T) extends TypeF[T]
 
   import TypeF._
   given Functor[TypeF] with
@@ -24,6 +27,9 @@ object Types:
       case TStringF()     => TStringF()
       case TFnF(from, to) => TFnF(f(from), f(to))
       case TVarF(name)    => TVarF(name)
+      case TEmptyRowF()   => TEmptyRowF()
+      case TRowExtendF(label, v, rowTail) => TRowExtendF(label, f(v), f(rowTail))
+      case TRecordF(t) => TRecordF(f(t))
 
   type Type = Fix[TypeF]
 
@@ -39,6 +45,7 @@ object Types:
     case TypesDoNotUnify
     case OccurCheckFailed
     case UnboundVariable
+    case RecursiveRow
 
   type Error[A] = Either[TypeError, A]
   type TI[A] = StateT[Error, TypeState, A]
@@ -61,6 +68,8 @@ object Types:
         t match
           case TVarF(name)    => Set(name)
           case TFnF(from, to) => from.union(to)
+          case TRecordF(t)    => t
+          case TRowExtendF(_, v, rowTail) => v.union(rowTail)
           case _              => Set.empty
       }
       val f = scheme.cata(alg)
@@ -77,6 +86,12 @@ object Types:
             val t2: Type = to(s)
             Fix(TFnF(t1, t2))
           case TVarF(name) => s.getOrElse(name, Fix(TVarF(name)))
+          case TRecordF(r) => r.apply(s)
+          case TEmptyRowF() => Fix(TEmptyRowF())
+          case TRowExtendF(label, v, rowTail) =>
+            val t1: Type = v(s)
+            val t2: Type = rowTail(s)
+            Fix(TRowExtendF(label, v, rowTail))
       )
       val f = scheme.cata(alg)
       f(t)
@@ -109,11 +124,11 @@ object Types:
     def empty = nullSubst
     def combine(s1: Substitution, s2: Substitution) = composeSubst(s1, s2)
 
-  def newTypeVar: TI[Type] = for {
+  def newTypeVar(prefix: String): TI[Type] = for {
     state <- StateT.get
     newState = (state.copy(counter = state.counter + 1))
     _ <- StateT.set(newState)
-  } yield Fix(TVarF(s"a${newState.counter}"))
+  } yield Fix(TVarF(s"${prefix}${newState.counter}"))
 
   def tiPrim(prim: Expr.Prim): TI[(Substitution, Type)] = prim match
     case Prim.I(i) => (nullSubst, Fix(TIntF())).pure
@@ -122,6 +137,20 @@ object Types:
         nullSubst,
         Fix(TFnF(Fix(TIntF()), Fix(TFnF(Fix(TIntF()), Fix(TIntF())))))
       ).pure
+    case Prim.Extend(label) => for {
+      r <- newTypeVar("r")
+      a <- newTypeVar("a")
+    } yield (nullSubst, Fix(TFnF(a, Fix(TFnF(Fix(TRecordF(r)), Fix(TRecordF(Fix(TRowExtendF(label, a, r)))))))))
+
+    case Prim.Project(label) => for {
+      a <- newTypeVar("a")
+      r <- newTypeVar("r")
+    } yield (nullSubst, Fix(TFnF(Fix(TRecordF(Fix(TRowExtendF(label, a, r)))), a)))
+
+    case Prim.Remove(label) => for {
+      a <- newTypeVar("a")
+      r <- newTypeVar("r")
+    } yield (nullSubst, Fix(TFnF(Fix(TRecordF(Fix(TRowExtendF(label, a, r)))), r)))
 
   def varBind(v: String, t: Type): TI[Substitution] =
     if t.freeVars.contains(v)
@@ -132,9 +161,42 @@ object Types:
     TypeScheme(vars = (t.freeVars -- env.freeVars).toList, t)
 
   def instantiate(ts: TypeScheme): TI[Type] = for {
-    nvars <- ts.vars.traverse[TI, Type](_ => newTypeVar)
+    nvars <- ts.vars.traverse[TI, Type](_ => newTypeVar("a"))
     s = ts.vars.zip(nvars).toMap
   } yield (ts.t(s))
+
+  def varName(t: Type): Option[String] =
+    def go(t: Type): (Map[String, Type], Option[String]) = t match
+      case Fix(TVarF(name)) => (Map.empty, Some(name))
+      case Fix(TRecordF(Fix(TRowExtendF(label, v, r)))) =>
+        val rs = go(r)
+        (rs._1.updated(label, v), rs._2)
+      case _ => (Map.empty, None)
+    go(t)._2
+
+
+  def rewriteRow(t: Type, newLabel: String): TI[Eval[(Substitution, Type, Type)]] = t match
+    case Fix(TEmptyRowF()) => tiFail(TypeError.TypesDoNotUnify)
+    case Fix(TRowExtendF(label, v, rowTail)) =>
+      if (label == newLabel)
+      then Eval.always((nullSubst, v, rowTail)).pure
+      else rowTail match
+        case Fix(TVarF(name)) => for {
+          rowVar <- newTypeVar("r")
+          fieldVar <- newTypeVar("a")
+        } yield Eval.later((
+           Map(name -> Fix(TRowExtendF(newLabel, fieldVar, rowVar))),
+           fieldVar,
+           Fix(TRowExtendF(label, v, rowVar))))
+        case _ =>
+          for {
+          result <- rewriteRow(rowTail, newLabel)
+        } yield result.map(r =>
+          (r._1,
+          r._2,
+          Fix(TRowExtendF(label, v, r._3)))
+        )
+    case _ => tiFail(TypeError.TypesDoNotUnify)
 
   def unify(t1: Type, t2: Type): TI[Substitution] = (t1, t2) match
     case (Fix(TIntF()), Fix(TIntF()))             => nullSubst.pure
@@ -146,8 +208,22 @@ object Types:
     case (Fix(TFnF(a, b)), Fix(TFnF(c, d))) =>
       for {
         s1 <- unify(a, c)
-        s2 <- unify(b, d)
+        s2 <- unify(b(s1), d(s1))
       } yield s1 |+| s2
+    case (Fix(TRecordF(r1)), Fix(TRecordF(r2))) => unify(r1, r2)
+    case (Fix(TEmptyRowF()), Fix(TEmptyRowF())) => nullSubst.pure
+    case (r1@Fix(TRowExtendF(label1, v1, rowTail1)), r2@Fix(TRowExtendF(label2, v2, rowTail2))) => for {
+      rewriteResult <- rewriteRow(r2, label1)
+      (s1, fieldType, rowTail) = rewriteResult.value
+      s <- varName(rowTail1) match
+        case Some(name) if s1.contains(name)  => tiFail(TypeError.RecursiveRow)
+        case _ => for {
+          s2 <- unify(v1(s1), fieldType(s1))
+          s3 = s1 |+| s2
+          s4 <- unify(rowTail1(s3), rowTail(s3))
+        } yield s4 |+| s3
+      } yield s
+
     case _ => tiFail[Substitution](TypeError.TypesDoNotUnify)
 
   def inferTypeAlg =
@@ -157,24 +233,24 @@ object Types:
         case Expr.AppF(func, arg) =>
           (e: TypeEnv) =>
             for {
-              v <- newTypeVar
+              v <- newTypeVar("a")
               // that is unfortunate can't pattern match here
               // (x,y) <- thingReturningAWrappedPair
               // because withFilter is missing
-              funcpair <- func(e)
-              (fSubst, fType) = funcpair
+              funcPair <- func(e)
+              (fSubst, fType) = funcPair
               updatedEnv = e(fSubst)
-              argpair <- arg(updatedEnv)
-              (argSubst, argType) = argpair
-              s3 <- unify(fType(argSubst), Fix(TFnF(argType, v)))
+              argPair <- arg(updatedEnv)
+              (argSubst, argType) = argPair
+              s3 <- unify(Fix(TFnF(argType, v)), fType(argSubst))
             } yield (s3 |+| argSubst |+| fSubst, v.apply(s3))
         case Expr.LamF(x, body) =>
           (e: TypeEnv) =>
             for {
-              v <- newTypeVar
+              v <- newTypeVar("a")
               newEnv = e.removed(x) ++ Map(x -> (TypeScheme(Nil, v)))
               b <- body(newEnv)
-            } yield (b._1, Fix(TFnF(v, b._2)))
+            } yield (b._1, Fix(TFnF(v(b._1), b._2)))
         case Expr.VarF(n) =>
           (e: TypeEnv) =>
             e.get(n) match {
@@ -192,6 +268,12 @@ object Types:
               inPair <- inExpr(newEnv)
               (inSubst, inT) = inPair
             } yield (defSubst |+| inSubst, inT)
+        case Expr.RecordF(fields) => (e: TypeEnv) =>
+          fields.foldLeft((nullSubst, Fix(TEmptyRowF())).pure[TI]) {
+            case (srti, (l, v)) => srti.flatMap((s,r) =>
+                v(e).map((s1, t1) =>
+                 (s |+| s1, Fix(TRowExtendF(l, t1, r)))))
+          }
       }
     )
 
