@@ -29,11 +29,13 @@ repl = do
            outputStrLn . show $ e
            repl
         Right form -> do
+            outputStrLn (show form)
             let types = typeInference form
             case types of
               Left e -> do
                   outputStrLn . show $ e
               Right (t, s) -> do
+                  outputStr " : "
                   outputStrLn . T.unpack . pp $ t
                   case run interpret (initialState form) of
                     Left e -> outputStrLn . show $ e

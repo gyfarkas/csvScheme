@@ -20,7 +20,7 @@ import Data.Term.Term
 -- for representing generic types
 data TypeScheme =
   TypeScheme {
-      _free :: [T.Text]
+      _vars :: [T.Text]
     , _ty :: Ty }
 makeLenses ''TypeScheme
 
@@ -31,7 +31,7 @@ nullSubst :: Subst
 nullSubst = Map.empty
 
 composeSubst :: Subst -> Subst -> Subst
-composeSubst s1 s2 = (Map.map (apply s1) s2) `Map.union` s1
+composeSubst s1 s2 = Map.map (apply s1) s2 `Map.union` s1
 
 -- type operations
 class Typeable a where
@@ -40,27 +40,27 @@ class Typeable a where
 
 instance Typeable Ty where
     freeVars (TVar a) = Set.singleton a
-    freeVars (TInt) = Set.empty
-    freeVars (TString)  = Set.empty
-    freeVars (TBool) = Set.empty
+    freeVars TInt = Set.empty
+    freeVars TString  = Set.empty
+    freeVars TBool = Set.empty
     freeVars (TFn t1 t2) = freeVars t1 `Set.union` freeVars t2
     freeVars (TRecord row) = freeVars row
-    freeVars (EmptyRow) = Set.empty
+    freeVars EmptyRow = Set.empty
     freeVars (ExtendRow (l, t) r) = freeVars t `Set.union` freeVars r
     apply subst (TFn a b) = TFn (apply subst a) (apply subst b)
     apply s (TRecord t) = TRecord (apply s t)
-    apply s (ExtendRow (l, t) r) = ExtendRow (l, (apply s t)) (apply s r)
+    apply s (ExtendRow (l, t) r) = ExtendRow (l, apply s t) (apply s r)
     apply subst (TVar a) = case Map.lookup a subst of
        Nothing -> TVar a
        Just t -> t
     apply subst t = t
 
 instance Typeable TypeScheme where
-    freeVars ts = freeVars (ts ^. ty) \\ (Set.fromList (ts ^. free))
-    apply subst ts = ts & ty %~ apply (foldr Map.delete subst (ts ^. free))
+    freeVars ts = freeVars (ts ^. ty) \\ Set.fromList (ts ^. vars)
+    apply subst ts = ts & ty %~ apply (foldr Map.delete subst (ts ^. vars))
 
 instance Typeable a => Typeable [a] where
-    freeVars ts = foldr (Set.union . freeVars) Set.empty ts
+    freeVars = foldr (Set.union . freeVars) Set.empty
     apply subst = fmap (apply subst)
 
 newtype TypeEnv = TypeEnv (Map.Map T.Text TypeScheme)
