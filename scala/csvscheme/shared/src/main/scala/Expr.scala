@@ -39,7 +39,6 @@ object Expr:
         case RecordF(fields)             => RecordF(fields.map((l, v) => (l, f(v))))
   type Expr = Fix[ExprF]
 
-
   def let(name: String, d: Expr, i: Expr): Expr = Fix(LetF(name, d, i))
   def varE(name: String): Expr = Fix(VarF(name))
   def intE(i: Int): Expr = Fix(PrimF(Prim.I(i)))
@@ -54,10 +53,11 @@ object Expr:
   def remove(label: String, r: Expr): Expr = app(Fix(PrimF(Prim.Remove(label))), r)
   def project(label: String, r: Expr): Expr = app(Fix(PrimF(Prim.Project(label))), r)
   def emptyList: Expr = Fix(PrimF(Prim.EmptyList))
+  def cons(v: Expr, l: Expr) = app(app(Fix(PrimF(Prim.ListCons)), v), l)
   def list(es: Seq[Expr]): Expr = es.foldRight(emptyList)((e, xs) =>
      app(app(Fix(PrimF(Prim.ListCons)), e), xs))
 
-  // stdlib 
+  // stdlib
   def select(col: String, table: Expr): Expr =
     val f: Expr = lambda("x", project(col, varE("x")))
     app(app(Fix(PrimF(Prim.ListMap)), f), table)
@@ -71,9 +71,14 @@ object Expr:
    val z: Expr = intE(0)
    app(app(app(Fix(PrimF(Prim.Fold)), z),f), projectedTable)
 
-  def tryParseValue(a: String): Expr = {
+  def count(column:String, table: Expr) =
+    val projectedTable: Expr = select(column, table)
+    val f: Expr = lambda("x", lambda("y", plus(varE("x"), intE(1))))
+    val z: Expr = intE(0)
+    app(app(app(Fix(PrimF(Prim.Fold)), z),f), projectedTable)
+
+  def tryParseValue(a: String): Expr =
      (a.toIntOption.map(intE) orElse a.toBooleanOption.map(boolE)).getOrElse(stringE(a))
-  }
 
   def readString(csv: String, separator: String = ",") =
     val source = Source.fromString(csv)

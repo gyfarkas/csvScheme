@@ -145,8 +145,6 @@ object Interpret:
           case _ => EvalM.fail("invalid list map")
     )
 
-
-
   def mkClosure2(f: Value => Value => EvalM[Value]): Value =
     mkClosure(x => EvalM.pure(mkClosure(y => f(x)(y))))
   def mkClosure(f: Value => EvalM[Value]): Value =
