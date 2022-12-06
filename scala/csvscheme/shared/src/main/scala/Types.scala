@@ -148,6 +148,10 @@ object Types:
       a <- newTypeVar("a")
     } yield (nullSubst, Fix(TFnF(a, Fix(TFnF(Fix(TListF(a)), Fix(TListF(a)))))))
 
+    case Prim.EmptyList => for {
+      a <- newTypeVar("a")
+    } yield (nullSubst, Fix(TListF(a)))
+
     case Prim.Extend(label) => for {
       r <- newTypeVar("r")
       a <- newTypeVar("a")
@@ -163,9 +167,31 @@ object Types:
       r <- newTypeVar("r")
     } yield (nullSubst, Fix(TFnF(Fix(TRecordF(Fix(TRowExtendF(label, a, r)))), r)))
 
-    case Prim.EmptyList => for {
+    case Prim.ListMap => for {
       a <- newTypeVar("a")
-    } yield (nullSubst, Fix(TListF(a)))
+      b <- newTypeVar("b")
+    } yield (
+      nullSubst,
+      Fix(TFnF(Fix(TFnF(a,b)), Fix(TFnF(Fix(TListF(a)), Fix(TListF(b))))))
+    )
+
+    case Prim.Filter => for {
+      a <- newTypeVar("a")
+    } yield (
+      nullSubst,
+      Fix(TFnF(Fix(TFnF(a, Fix(TBoolF()))), Fix(TFnF(Fix(TListF(a)), Fix(TListF(a))))))
+    )
+
+    case Prim.Fold => for {
+      a <- newTypeVar("a")
+      z <- newTypeVar("a")
+      combineT = Fix(TFnF(z, Fix(TFnF(z,z))))
+    } yield (
+      nullSubst,
+      Fix(TFnF(z,
+        Fix(TFnF(combineT,
+          Fix(TFnF(Fix(TListF(a)), z))))))
+      )
 
   def varBind(v: String, t: Type): TI[Substitution] =
     if t.freeVars.contains(v)

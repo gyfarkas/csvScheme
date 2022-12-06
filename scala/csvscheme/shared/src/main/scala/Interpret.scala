@@ -3,7 +3,9 @@ package csvscheme
 import higherkindness.droste.{Algebra, scheme}
 
 import Expr._
-import cats.Eval
+import cats._
+import cats.syntax.all._
+import scala.collection.immutable.Stream.Empty
 object Interpret:
   /*
   case class Fix[F[_]](unFix : F[Fix[F]])
@@ -28,7 +30,7 @@ object Interpret:
     case S(s: String)
     case Closure(f: Thunk => EvalM[Value])
     case Rec(rs: Map[String, Value]) // records are strict
-    case List(values: LazyList[Value]) // list are lazy
+    case List(values: Stream[Value]) // list are lazy
 
   type Env = Map[String, Thunk]
 
@@ -101,15 +103,53 @@ object Interpret:
         case _ => EvalM.fail(s"cannot project, $label is invalid ")
     )
 
-    case Prim.EmptyList => Value.List(LazyList.empty[Value])
+    case Prim.EmptyList => Value.List(Stream.empty[Value])
     case Prim.ListCons => mkClosure2(x =>
       l =>
         (x, l) match
           case (v, Value.List(xs)) => EvalM.pure(Value.List(xs.prepended(v)))
           case _ => EvalM.fail("consing on non list")
     )
+    case Prim.ListMap => mkClosure2(f =>
+      l =>
+        (f, l) match
+          case (Value.Closure(f), Value.List(xs)) =>
+            xs.traverse(x => f(Thunk(x))).map(Value.List(_))
+          case _ => EvalM.fail("invalid list map")
+    )
+
+     case Prim.Filter => mkClosure2(f =>
+      l =>
+        (f, l) match
+          case (Value.Closure(f), Value.List(xs)) =>
+            val filtered = xs
+                          .map(x => (x, f(Thunk(x))))
+                          .filter(x => x._2 == EvalM.pure(Value.B(true)))
+                          .map((v, b) => v)
+            EvalM.pure(Value.List(filtered))
+
+          case _ => EvalM.fail("invalid list map")
+    )
+
+      case Prim.Fold => mkClosure3(
+        z => f => l =>
+        (z, f, l) match
+          case (zv, Value.Closure(f), Value.List(xs)) =>
+            xs.foldLeft(EvalM.pure(zv)) {
+              (acc, v) => acc.flatMap(a => f(Thunk(a))).flatMap(g =>
+                g match
+                  case Value.Closure(gc) => gc(Thunk(v))
+                  case _ => EvalM.fail("Expected two argument function")
+              )
+            }
+          case _ => EvalM.fail("invalid list map")
+    )
+
+
 
   def mkClosure2(f: Value => Value => EvalM[Value]): Value =
     mkClosure(x => EvalM.pure(mkClosure(y => f(x)(y))))
   def mkClosure(f: Value => EvalM[Value]): Value =
     Value.Closure(x => x.map(_.flatMap(f)).value)
+  def mkClosure3(f: Value => Value => Value => EvalM[Value]): Value =
+    mkClosure(x => EvalM.pure(mkClosure2(y => z => f(x)(y)(z))))

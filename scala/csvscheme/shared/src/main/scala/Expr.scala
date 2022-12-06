@@ -16,6 +16,9 @@ object Expr:
     case Remove(label: String)
     case EmptyList
     case ListCons
+    case ListMap
+    case Filter
+    case Fold
 
   sealed trait ExprF[A]
   case class VarF[A](v: String) extends ExprF[A]
@@ -47,11 +50,26 @@ object Expr:
   def plus(i: Expr, j: Expr): Expr = app(app(Fix(PrimF(Prim.Plus)), i), j)
   val emptyRow : Expr = Fix(RecordF(Map.empty))
   def record(m :Map[String, Expr]) = Fix(RecordF(m))
-  def extend(label: String, v: Expr, r: Expr) = app(app(Fix(PrimF(Prim.Extend(label))), v), r)
-  def remove(label: String, r: Expr) = app(Fix(PrimF(Prim.Remove(label))), r)
-  def project(label: String, r: Expr) = app(Fix(PrimF(Prim.Project(label))), r)
+  def extend(label: String, v: Expr, r: Expr): Expr = app(app(Fix(PrimF(Prim.Extend(label))), v), r)
+  def remove(label: String, r: Expr): Expr = app(Fix(PrimF(Prim.Remove(label))), r)
+  def project(label: String, r: Expr): Expr = app(Fix(PrimF(Prim.Project(label))), r)
   def emptyList: Expr = Fix(PrimF(Prim.EmptyList))
-  def list(es: Seq[Expr]): Expr = es.foldRight(emptyList)((e, xs) => app(app(Fix(PrimF(Prim.ListCons)), e), xs))
+  def list(es: Seq[Expr]): Expr = es.foldRight(emptyList)((e, xs) =>
+     app(app(Fix(PrimF(Prim.ListCons)), e), xs))
+
+  // stdlib 
+  def select(col: String, table: Expr): Expr =
+    val f: Expr = lambda("x", project(col, varE("x")))
+    app(app(Fix(PrimF(Prim.ListMap)), f), table)
+
+  def filter(condition: Expr, table: Expr): Expr =
+    app(app(Fix(PrimF(Prim.Filter)), condition), table)
+
+  def sum(column: String, table: Expr) =
+   val projectedTable: Expr = select(column, table)
+   val f: Expr = lambda("x", lambda("y", plus(varE("x"), varE("y"))))
+   val z: Expr = intE(0)
+   app(app(app(Fix(PrimF(Prim.Fold)), z),f), projectedTable)
 
   def tryParseValue(a: String): Expr = {
      (a.toIntOption.map(intE) orElse a.toBooleanOption.map(boolE)).getOrElse(stringE(a))

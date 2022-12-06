@@ -142,7 +142,7 @@ class BasicTests extends munit.FunSuite {
     val exp = emptyList
     val evaluated = eval(Map.empty)(exp)
     val typeChecked = runInference(Map.empty)(exp)
-    assertEquals(evaluated, Right(Value.List(LazyList.empty)))
+    assertEquals(evaluated, Right(Value.List(Stream.empty)))
     assertEquals(typeChecked, Right(Fix(TypeF.TListF(Fix(TypeF.TVarF("a1"))))))
   }
 
@@ -150,7 +150,7 @@ class BasicTests extends munit.FunSuite {
     val exp = list(List(intE(1),intE(2),intE(3)))
     val evaluated = eval(Map.empty)(exp)
     val typeChecked = runInference(Map.empty)(exp)
-    assertEquals(evaluated, Right(Value.List(LazyList(Value.I(1), Value.I(2), Value.I(3)))))
+    assertEquals(evaluated, Right(Value.List(Stream(Value.I(1), Value.I(2), Value.I(3)))))
     assertEquals(typeChecked, Right(Fix(TypeF.TListF(Fix(TypeF.TIntF())))))
   }
 
@@ -172,6 +172,43 @@ class BasicTests extends munit.FunSuite {
       |1,janos,false
       |bela,2,true""".stripMargin
     val parsed = readString(table)
+    val typeChecked = runInference(Map.empty)(parsed)
+    assert(typeChecked.isLeft)
+  }
+
+  test("sum") {
+    val table =
+      """a,b,c
+      |1, janos, false
+      |2, bela , true""".stripMargin
+    val parsed =  sum("a", readString(table))
+    val typeChecked = runInference(Map.empty)(parsed)
+    assert(typeChecked.isRight)
+    val evaluated = eval(Map.empty)(parsed)
+    assert(evaluated.isRight)
+    assertEquals(typeChecked, Right(Fix(TypeF.TIntF())))
+    assertEquals(evaluated, Right(Value.I(3)))
+  }
+
+  test("filter") {
+    val table =
+      """a,b,c
+      |1 ,janos, false
+      |2 ,bela , true """.stripMargin
+    val parsed =  filter(lambda("x", project("c",varE("x"))), readString(table))
+    val typeChecked = runInference(Map.empty)(parsed)
+    assert(typeChecked.isRight)
+    val evaluated = eval(Map.empty)(parsed)
+    assert(evaluated.isRight)
+  }
+
+  test("select invalid col does not typecheck") {
+    val table =
+      """a,b,c
+      |1 ,janos, false
+      |2 ,bela , true """.stripMargin
+    val missingCol = "d"
+    val parsed =  filter(lambda("x", project(missingCol,varE("x"))), readString(table))
     val typeChecked = runInference(Map.empty)(parsed)
     assert(typeChecked.isLeft)
   }
