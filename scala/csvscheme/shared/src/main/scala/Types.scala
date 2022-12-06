@@ -18,6 +18,7 @@ object Types:
     case TEmptyRowF[T]() extends TypeF[T]
     case TRowExtendF[T](label: String, v: T, rowTail: T) extends TypeF[T]
     case TRecordF[T](row: T) extends TypeF[T]
+    case TListF[T](elemType: T) extends TypeF[T]
 
   import TypeF._
   given Functor[TypeF] with
@@ -30,6 +31,7 @@ object Types:
       case TEmptyRowF()   => TEmptyRowF()
       case TRowExtendF(label, v, rowTail) => TRowExtendF(label, f(v), f(rowTail))
       case TRecordF(t) => TRecordF(f(t))
+      case TListF(t) => TListF(f(t))
 
   type Type = Fix[TypeF]
 
@@ -70,6 +72,7 @@ object Types:
           case TFnF(from, to) => from.union(to)
           case TRecordF(t)    => t
           case TRowExtendF(_, v, rowTail) => v.union(rowTail)
+          case TListF(t)       => t
           case _              => Set.empty
       }
       val f = scheme.cata(alg)
@@ -92,6 +95,7 @@ object Types:
             val t1: Type = v(s)
             val t2: Type = rowTail(s)
             Fix(TRowExtendF(label, v, rowTail))
+          case TListF(t) =>  Fix(TListF(t(s)))
       )
       val f = scheme.cata(alg)
       f(t)
@@ -137,6 +141,11 @@ object Types:
         nullSubst,
         Fix(TFnF(Fix(TIntF()), Fix(TFnF(Fix(TIntF()), Fix(TIntF())))))
       ).pure
+
+    case Prim.ListCons => for {
+      a <- newTypeVar("a")
+    } yield (nullSubst, Fix(TFnF(a, Fix(TFnF(Fix(TListF(a)), Fix(TListF(a)))))))
+
     case Prim.Extend(label) => for {
       r <- newTypeVar("r")
       a <- newTypeVar("a")
@@ -151,6 +160,10 @@ object Types:
       a <- newTypeVar("a")
       r <- newTypeVar("r")
     } yield (nullSubst, Fix(TFnF(Fix(TRecordF(Fix(TRowExtendF(label, a, r)))), r)))
+
+    case Prim.EmptyList => for {
+      a <- newTypeVar("a")
+    } yield (nullSubst, Fix(TListF(a)))
 
   def varBind(v: String, t: Type): TI[Substitution] =
     if t.freeVars.contains(v)
@@ -211,6 +224,7 @@ object Types:
         s2 <- unify(b(s1), d(s1))
       } yield s1 |+| s2
     case (Fix(TRecordF(r1)), Fix(TRecordF(r2))) => unify(r1, r2)
+    case (Fix(TListF(t1)), Fix(TListF(t2))) => unify(t1, t2)
     case (Fix(TEmptyRowF()), Fix(TEmptyRowF())) => nullSubst.pure
     case (r1@Fix(TRowExtendF(label1, v1, rowTail1)), r2@Fix(TRowExtendF(label2, v2, rowTail2))) => for {
       rewriteResult <- rewriteRow(r2, label1)

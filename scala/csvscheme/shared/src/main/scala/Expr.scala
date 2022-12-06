@@ -10,6 +10,8 @@ object Expr:
     case Project(label: String)
     case Extend(label: String)
     case Remove(label: String)
+    case EmptyList
+    case ListCons
 
 
   sealed trait ExprF[A]
@@ -43,6 +45,8 @@ object Expr:
   def extend(label: String, v: Expr, r: Expr) = app(app(Fix(PrimF(Prim.Extend(label))), v), r)
   def remove(label: String, r: Expr) = app(Fix(PrimF(Prim.Remove(label))), r)
   def project(label: String, r: Expr) = app(Fix(PrimF(Prim.Project(label))), r)
+  def emptyList: Expr = Fix(PrimF(Prim.EmptyList))
+  def list(es: Seq[Expr]): Expr = es.foldRight(emptyList)((e, xs) => app(app(Fix(PrimF(Prim.ListCons)), e), xs))
 
   trait Expressable[A] {
     def toExpr(a: A) : Expr

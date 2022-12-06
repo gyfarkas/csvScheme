@@ -130,11 +130,27 @@ class BasicTests extends munit.FunSuite {
     assertEquals(typeChecked, Right(expected))
   }
 
-  test("record function type error") {
+  test("record projection type error") {
     val exp = app(
        lambda("x", plus(project("a", varE("x")), project("b", varE("x"))))
       , record(Map("a" -> intE(1), "c" -> intE(3))))
     val typeChecked = runInference(Map.empty)(exp)
     assertEquals(typeChecked, Left(TypeError.TypesDoNotUnify))
+  }
+
+  test("emptyList") {
+    val exp = emptyList
+    val evaluated = eval(Map.empty)(exp)
+    val typeChecked = runInference(Map.empty)(exp)
+    assertEquals(evaluated, Right(Value.List(LazyList.empty)))
+    assertEquals(typeChecked, Right(Fix(TypeF.TListF(Fix(TypeF.TVarF("a1"))))))
+  }
+
+   test("non empyList") {
+    val exp = list(List(intE(1),intE(2),intE(3)))
+    val evaluated = eval(Map.empty)(exp)
+    val typeChecked = runInference(Map.empty)(exp)
+    assertEquals(evaluated, Right(Value.List(LazyList(Value.I(1), Value.I(2), Value.I(3)))))
+    assertEquals(typeChecked, Right(Fix(TypeF.TListF(Fix(TypeF.TIntF())))))
   }
 }

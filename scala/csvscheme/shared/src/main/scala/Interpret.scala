@@ -25,7 +25,8 @@ object Interpret:
   enum Value:
     case I(int: Int)
     case Closure(f: Thunk => EvalM[Value])
-    case Rec(rs: Map[String, Value])
+    case Rec(rs: Map[String, Value]) // records are strict
+    case List(values: LazyList[Value]) // list are lazy
 
   type Env = Map[String, Thunk]
 
@@ -94,6 +95,14 @@ object Interpret:
        r match
         case (Value.Rec(rs)) if rs.contains(label) => EvalM.pure(rs(label))
         case _ => EvalM.fail(s"cannot project, $label is invalid ")
+    )
+
+    case Prim.EmptyList => Value.List(LazyList.empty[Value])
+    case Prim.ListCons => mkClosure2(x =>
+      l =>
+        (x, l) match
+          case (v, Value.List(xs)) => EvalM.pure(Value.List(xs.prepended(v)))
+          case _ => EvalM.fail("consing on non list")
     )
 
   def mkClosure2(f: Value => Value => EvalM[Value]): Value =
