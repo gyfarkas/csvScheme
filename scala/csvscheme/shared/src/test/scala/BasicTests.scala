@@ -135,7 +135,7 @@ class BasicTests extends munit.FunSuite {
        lambda("x", plus(project("a", varE("x")), project("b", varE("x"))))
       , record(Map("a" -> intE(1), "c" -> intE(3))))
     val typeChecked = runInference(Map.empty)(exp)
-    assertEquals(typeChecked, Left(TypeError.TypesDoNotUnify))
+    assertEquals(typeChecked, Left(TypeError.TypesDoNotUnify("t1: TEmptyRowF(), t2: TRowExtendF(b,TVarF(a9),TVarF(r13))")))
   }
 
   test("emptyList") {
@@ -152,5 +152,27 @@ class BasicTests extends munit.FunSuite {
     val typeChecked = runInference(Map.empty)(exp)
     assertEquals(evaluated, Right(Value.List(LazyList(Value.I(1), Value.I(2), Value.I(3)))))
     assertEquals(typeChecked, Right(Fix(TypeF.TListF(Fix(TypeF.TIntF())))))
+  }
+
+  test("read table") {
+    val table =
+      """a,b,c
+      |1,janos,false
+      |2,bela,true""".stripMargin
+    val parsed = readString(table)
+    val evaluated = eval(Map.empty)(parsed)
+    val typeChecked = runInference(Map.empty)(parsed)
+    assert(evaluated.isRight)
+    assert(typeChecked.isRight)
+  }
+
+   test("read table inconsistent fails typecheck") {
+    val table =
+      """a,b,c
+      |1,janos,false
+      |bela,2,true""".stripMargin
+    val parsed = readString(table)
+    val typeChecked = runInference(Map.empty)(parsed)
+    assert(typeChecked.isLeft)
   }
 }

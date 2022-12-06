@@ -44,7 +44,7 @@ object Types:
   val emptyState = TypeState(0)
 
   enum TypeError:
-    case TypesDoNotUnify
+    case TypesDoNotUnify(string: String)
     case OccurCheckFailed
     case UnboundVariable
     case RecursiveRow
@@ -136,6 +136,8 @@ object Types:
 
   def tiPrim(prim: Expr.Prim): TI[(Substitution, Type)] = prim match
     case Prim.I(i) => (nullSubst, Fix(TIntF())).pure
+    case Prim.B(b) => (nullSubst, Fix(TBoolF())).pure
+    case Prim.S(s) => (nullSubst, Fix(TStringF())).pure
     case Prim.Plus =>
       (
         nullSubst,
@@ -189,7 +191,7 @@ object Types:
 
 
   def rewriteRow(t: Type, newLabel: String): TI[Eval[(Substitution, Type, Type)]] = t match
-    case Fix(TEmptyRowF()) => tiFail(TypeError.TypesDoNotUnify)
+    case Fix(TEmptyRowF()) => tiFail(TypeError.TypesDoNotUnify("emptyRow"))
     case Fix(TRowExtendF(label, v, rowTail)) =>
       if (label == newLabel)
       then Eval.always((nullSubst, v, rowTail)).pure
@@ -209,7 +211,7 @@ object Types:
           r._2,
           Fix(TRowExtendF(label, v, r._3)))
         )
-    case _ => tiFail(TypeError.TypesDoNotUnify)
+    case other => tiFail(TypeError.TypesDoNotUnify(s"other: $other"))
 
   def unify(t1: Type, t2: Type): TI[Substitution] = (t1, t2) match
     case (Fix(TIntF()), Fix(TIntF()))             => nullSubst.pure
@@ -238,7 +240,7 @@ object Types:
         } yield s4 |+| s3
       } yield s
 
-    case _ => tiFail[Substitution](TypeError.TypesDoNotUnify)
+    case (t1,t2) => tiFail[Substitution](TypeError.TypesDoNotUnify(s"t1: $t1, t2: $t2"))
 
   def inferTypeAlg =
     Algebra((e: ExprF[TypeCheckResult]) =>

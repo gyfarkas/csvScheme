@@ -24,6 +24,8 @@ object Interpret:
 
   enum Value:
     case I(int: Int)
+    case B(b: Boolean)
+    case S(s: String)
     case Closure(f: Thunk => EvalM[Value])
     case Rec(rs: Map[String, Value]) // records are strict
     case List(values: LazyList[Value]) // list are lazy
@@ -69,6 +71,8 @@ object Interpret:
 
   def evalPrim(prim: Prim): Value = prim match
     case Prim.I(i) => Value.I(i)
+    case Prim.B(i) => Value.B(i)
+    case Prim.S(i) => Value.S(i)
     case Prim.Plus =>
       mkClosure2(x =>
         y => {

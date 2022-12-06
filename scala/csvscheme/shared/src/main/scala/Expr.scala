@@ -1,18 +1,21 @@
 package csvscheme
 
-import cats.Functor
+import cats._
+import cats.syntax.all._
 import higherkindness.droste.data.Fix
+import scala.io.Source
 
 object Expr:
   enum Prim:
     case I(i: Int)
+    case B(b: Boolean)
+    case S(s: String)
     case Plus
     case Project(label: String)
     case Extend(label: String)
     case Remove(label: String)
     case EmptyList
     case ListCons
-
 
   sealed trait ExprF[A]
   case class VarF[A](v: String) extends ExprF[A]
@@ -37,6 +40,8 @@ object Expr:
   def let(name: String, d: Expr, i: Expr): Expr = Fix(LetF(name, d, i))
   def varE(name: String): Expr = Fix(VarF(name))
   def intE(i: Int): Expr = Fix(PrimF(Prim.I(i)))
+  def boolE(b: Boolean):Expr = Fix(PrimF(Prim.B(b)))
+  def stringE(s: String):Expr = Fix(PrimF(Prim.S(s)))
   def lambda(name: String, body: Expr) = Fix(LamF(name, body))
   def app(f: Expr, x: Expr) = Fix(AppF(f, x))
   def plus(i: Expr, j: Expr): Expr = app(app(Fix(PrimF(Prim.Plus)), i), j)
@@ -47,6 +52,24 @@ object Expr:
   def project(label: String, r: Expr) = app(Fix(PrimF(Prim.Project(label))), r)
   def emptyList: Expr = Fix(PrimF(Prim.EmptyList))
   def list(es: Seq[Expr]): Expr = es.foldRight(emptyList)((e, xs) => app(app(Fix(PrimF(Prim.ListCons)), e), xs))
+
+  def tryParseValue(a: String): Expr = {
+     (a.toIntOption.map(intE) orElse a.toBooleanOption.map(boolE)).getOrElse(stringE(a))
+  }
+
+  def readString(csv: String, separator: String = ",") =
+    val source = Source.fromString(csv)
+    readSource(source)
+
+  def readSource(csv: Source, separator: String = ",") =
+    val lines = csv.getLines
+    val firstLine = lines.next()
+    val fields = firstLine.split(separator).toList
+    list(for {
+      line <- lines.toSeq
+      values = line.split(separator).map(tryParseValue)
+      labelled = fields.zip(values).toMap[String, Expr]
+    } yield record(labelled))
 
   trait Expressable[A] {
     def toExpr(a: A) : Expr
