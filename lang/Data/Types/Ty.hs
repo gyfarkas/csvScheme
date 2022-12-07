@@ -22,6 +22,7 @@ data Ty
  | TRecord Ty  -- anonymous records like {a:1, b:"s", c:true}
  | EmptyRow    -- unit
  | ExtendRow (Label, Ty) Ty -- row cons
+ | TList Ty
  deriving (Eq, Show)
 
 makePrisms ''Ty
@@ -33,8 +34,9 @@ pp TBool = "Boolean"
 pp (TVar name) = name
 pp (TFn a b) = "(" <> (pp a) <> " -> "  <> (pp b) <> ")"
 pp EmptyRow = ""
-pp (ExtendRow (l, t) r) = (unLabel l) <> ":" <> (pp t) <> "," <> (pp r) 
-pp (TRecord ts) = "[" <> (T.intercalate "," $ ppRow ts) <> "]"
+pp (ExtendRow (l, t) r) = (unLabel l) <> ":" <> (pp t) <> "," <> (pp r)
+pp (TList t) = "[" <> pp t <> "]"
+pp (TRecord ts) = "{" <> (T.intercalate "," $ ppRow ts) <> "}"
   where
     ppRow (ExtendRow (l, t) r) = (unLabel l) <> ":" <> (pp t) : (ppRow r)
     ppRow (TVar n) = [n]

@@ -166,9 +166,8 @@ ti env (Rec ts) = do
     return (subst, r)
   where
     listToRow :: [(Label, Ty)] -> Ty
-    listToRow [] = EmptyRow
-    listToRow ((l, t):xs) = ExtendRow (l,t) (listToRow xs)
-
+    listToRow = foldr ExtendRow EmptyRow
+   
     folding :: (Subst, [(Label, Ty)]) -> [(Label, Term)] -> MTypecheck (Subst, [(Label, Ty)])  =
       foldM $ \(subst, ts) (l, term) -> do
         (subst', t') <- ti env term
@@ -190,19 +189,19 @@ ti env (App e1 e2) = do
     typeAssignments <.= f
     return (f, apply s3 tv)
 ti env (BuiltIn (Plus i1 i2)) =
-    return $ (nullSubst, TFn TInt (TFn TInt TInt))
+    return (nullSubst, TFn TInt (TFn TInt TInt))
 ti env (BuiltIn (Project label r)) = do
     a <- newTyVar "a"
     rv <- newTyVar "r"
-    return $ (nullSubst, TFn (TRecord $ ExtendRow (label, a) rv) a)
+    return (nullSubst, TFn (TRecord $ ExtendRow (label, a) rv) a)
 ti env (BuiltIn (Extend (label, v) r)) = do
     a <- newTyVar "a"
     rv <- newTyVar "r"
-    return $ (nullSubst, TFn a (TFn (TRecord rv) (TRecord $ ExtendRow (label, a) rv)))
+    return (nullSubst, TFn a (TFn (TRecord rv) (TRecord $ ExtendRow (label, a) rv)))
 ti env (BuiltIn (Remove label r)) = do
     a <- newTyVar "a"
     rv <- newTyVar "r"
-    return $ (nullSubst, TFn (TRecord $ ExtendRow (label, a) rv) (TRecord rv))
+    return (nullSubst, TFn (TRecord $ ExtendRow (label, a) rv) (TRecord rv))
 findLabel :: Label -> Ty -> Maybe Ty
 findLabel l (TRecord row) = findLabel l row
 findLabel l (ExtendRow (l', t) r)
