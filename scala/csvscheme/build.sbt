@@ -22,6 +22,7 @@ lazy val csvscheme =
         "org.typelevel" %% "cats-core" % "2.9.0",
         "org.typelevel" %% "cats-free" % "2.9.0",
         "org.typelevel" %% "cats-parse" % "0.3.7",
+        "org.typelevel" %% "paiges-core" % "0.4.2",
         "org.scalameta" %% "munit" % "0.7.29" % Test)
   ).
   jvmSettings(
@@ -32,6 +33,7 @@ lazy val csvscheme =
           "org.typelevel" %% "cats-core" % "2.9.0",
           "org.typelevel" %% "cats-free" % "2.9.0",
           "org.typelevel" %% "cats-parse" % "0.3.7",
+          "org.typelevel" %% "paiges-core" % "0.4.2",
           "org.scalameta" %% "munit" % "0.7.29" % Test)
   ).
   jsSettings(
