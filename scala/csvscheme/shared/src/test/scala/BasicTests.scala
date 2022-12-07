@@ -117,8 +117,8 @@ class BasicTests extends munit.FunSuite {
     val rec = record(Map("a" -> intE(1), "c" -> stringE("3")))
     val typeChecked = runInference(Map.empty)(rec)
     val expected =
-      Fix(TypeF.TRowExtendF("c", Fix(TypeF.TStringF()),
-       Fix(TypeF.TRowExtendF("a",Fix(TypeF.TIntF()),
+      Fix(TypeF.TRowExtendF("a", Fix(TypeF.TIntF()),
+       Fix(TypeF.TRowExtendF("c",Fix(TypeF.TStringF()),
         Fix(TypeF.TEmptyRowF())))))
     assertEquals(typeChecked, Right(expected))
   }
@@ -142,6 +142,8 @@ class BasicTests extends munit.FunSuite {
 
   test("abstract project") {
     val f = lambda("x", project("a", varE("x")))
+    val ft = runInference(Map.empty)(f)
+    assert(ft.isRight)
     val exp = app(app(lambda("f", lambda("y", app(varE("f"), varE("y")))), f), record(Map("a" -> intE(1))))
     val typeChecked = runInference(Map.empty)(exp)
     val expected = Fix(TypeF.TIntF())

@@ -266,7 +266,7 @@ object Types:
         case Expr.AppF(func, arg) =>
           (e: TypeEnv) =>
             for {
-              v <- newTypeVar("aa")
+              v <- newTypeVar("a")
               // that is unfortunate can't pattern match here
               // (x,y) <- thingReturningAWrappedPair
               // because withFilter is missing
@@ -280,7 +280,7 @@ object Types:
         case Expr.LamF(x, body) =>
           (e: TypeEnv) =>
             for {
-              v <- newTypeVar("aaa")
+              v <- newTypeVar("a")
               newEnv = e ++ Map(x -> (TypeScheme(Nil, v)))
               b <- body(newEnv)
             } yield (b._1, Fix(TFnF(v(b._1), b._2)))
@@ -301,9 +301,8 @@ object Types:
               (inSubst, inT) = inPair
             } yield (defSubst |+| inSubst, inT)
         case Expr.RecordF(fields) => (e: TypeEnv) =>
-
-          fields.foldLeft((nullSubst, Fix(TEmptyRowF())).pure[TI]) {
-            case (srti, (l, v)) => srti.flatMap((s,r) =>
+          fields.foldRight((nullSubst, Fix(TEmptyRowF())).pure[TI]) {
+            case ((l, v), srti) => srti.flatMap((s,r) =>
                 v(e).map((s1, t1) =>
                  (s |+| s1, Fix(TRowExtendF(l, t1, r)))))
           }
