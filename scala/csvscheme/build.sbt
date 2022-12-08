@@ -6,6 +6,7 @@ lazy val root = project.in(file("."))
   .settings(
     publish := {},
     publishLocal := {},
+    assembly/assemblyJarName := "csvscheme.jar"
   )
 
 lazy val csvscheme =

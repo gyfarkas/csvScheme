@@ -42,6 +42,7 @@ executable csvScheme
                       , lens
                       , parsec
                       , haskeline
+                      , raw-strings-qq
 
     hs-source-dirs:  app
                    , lang

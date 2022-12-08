@@ -65,6 +65,9 @@ object Expr:
   def filter(condition: Expr, table: Expr): Expr =
     app(app(Fix(PrimF(Prim.Filter)), condition), table)
 
+  def fmap(f: Expr, table: Expr): Expr =
+    app(app(Fix(PrimF(Prim.ListMap)), f), table)
+
   def sum(column: String, table: Expr) =
    val projectedTable: Expr = select(column, table)
    val f: Expr = lambda("x", lambda("y", plus(varE("x"), varE("y"))))

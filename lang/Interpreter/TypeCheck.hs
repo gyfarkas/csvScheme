@@ -135,7 +135,7 @@ rewriteRow (ExtendRow (label, fieldTy) rowTail) newLabel
              , ExtendRow (label, fieldTy) beta
              , Map.singleton alpha $ ExtendRow (newLabel, gamma) beta
              )
-  | otherwise   = do
+  | otherwise = do
       (fieldTy', rowTail', s) <- rewriteRow rowTail newLabel
       return ( fieldTy'
              , ExtendRow (label, fieldTy) rowTail'

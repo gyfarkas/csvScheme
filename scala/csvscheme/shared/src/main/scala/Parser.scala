@@ -63,6 +63,19 @@ object ExpParser:
             "<<" -> ((x: String) => (f: Expr.Expr) => Expr.remove(x,f))
         )
 
+        val builtInMap: Map[String, (Expr.Expr => Expr.Expr => Expr.Expr)] = Map(
+            "filter" -> ((f: Expr.Expr) => (lst: Expr.Expr) => Expr.filter(f, lst)),
+            "map" -> ((f: Expr.Expr) => (lst: Expr.Expr) => Expr.fmap(f, lst))
+        )
+        def builtins: List[Parser[Expr.Expr]] =  (for ((builtIn, f) <- builtInMap)
+            yield (for {
+            _ <- Parser.string(builtIn).void
+            _ <- whitespaces0
+            x <- recur
+            _ <- whitespaces0
+            b <- recur
+        } yield f(x)(b))).toList
+
         def builtIns2: List[Parser[Expr.Expr]] =
             (for ((builtIn, f) <- builtIn2Map)
             yield (for {
@@ -98,7 +111,7 @@ object ExpParser:
         } yield Expr.app(f, x)
 
         Parser.oneOf(List(
-            brackets(Parser.oneOf(builtIns2 ++ builtIns3) orElse addition orElse app),
+            brackets(Parser.oneOf(builtIns2 ++ builtIns3 ++ builtins) orElse addition orElse app),
             varP,
             intP,
             stringP,

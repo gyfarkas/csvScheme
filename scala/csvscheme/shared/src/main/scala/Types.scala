@@ -6,6 +6,7 @@ import cats.implicits._
 import higherkindness.droste.data.Fix
 import cats.data.StateT
 import csvscheme.Expr._
+import csvscheme.PP.ppType
 import higherkindness.droste.{Algebra, scheme}
 
 object Types:
@@ -212,7 +213,7 @@ object Types:
     go(t)._2
 
   def rewriteRow(t: Type, newLabel: String): TI[Eval[(Substitution, Type, Type)]] = t match
-    case Fix(TEmptyRowF()) => tiFail(TypeError.TypesDoNotUnify("emptyRow"))
+    case Fix(TEmptyRowF()) => tiFail(TypeError.TypesDoNotUnify("empty row"))
     case Fix(TRowExtendF(label, v, rowTail)) =>
       if (label == newLabel)
       then Eval.always((nullSubst, v, rowTail)).pure
@@ -220,24 +221,25 @@ object Types:
         case Fix(TVarF(name)) => for {
           rowVar <- newTypeVar("r")
           fieldVar <- newTypeVar("a")
+          s = Map(name -> Fix(TRowExtendF(newLabel, fieldVar, rowVar)))
         } yield Eval.later((
-           Map(name -> Fix(TRowExtendF(newLabel, fieldVar, rowVar))),
+           s,
            fieldVar,
            Fix(TRowExtendF(label, v, rowVar))))
         case _ =>
           for {
           result <- rewriteRow(rowTail, newLabel)
         } yield result.map(r =>
-          (r._1, r._2, Fix(TRowExtendF(label, v, r._3))))
-    case other => tiFail(TypeError.TypesDoNotUnify(s"other: $other"))
+          (r._1, r._2, Fix(TRowExtendF(label, v, r._3(r._1)))))
+    case other => tiFail(TypeError.TypesDoNotUnify(s"other: ${ppType(other)}"))
 
   def unify(t1: Type, t2: Type): TI[Substitution] = (t1, t2) match
     case (Fix(TIntF()), Fix(TIntF()))             => nullSubst.pure
     case (Fix(TBoolF()), Fix(TBoolF()))           => nullSubst.pure
     case (Fix(TStringF()), Fix(TStringF()))       => nullSubst.pure
     case (Fix(TVarF(n)), Fix(TVarF(m))) if m == n => nullSubst.pure
-    case (t, Fix(TVarF(m)))                       => varBind(m, t)
     case (Fix(TVarF(n)), t)                       => varBind(n, t)
+    case (t, Fix(TVarF(m)))                       => varBind(m, t)
     case (Fix(TFnF(a, b)), Fix(TFnF(c, d))) =>
       for {
         s1 <- unify(a, c)
@@ -245,19 +247,19 @@ object Types:
       } yield s1 |+| s2
     case (Fix(TListF(t1)), Fix(TListF(t2))) => unify(t1, t2)
     case (Fix(TEmptyRowF()), Fix(TEmptyRowF())) => nullSubst.pure
-    case (r1@Fix(TRowExtendF(label1, v1, rowTail1)), r2@Fix(TRowExtendF(label2, v2, rowTail2))) =>
+    case (r1@Fix(TRowExtendF(label1, fieldType1, rowTail1)), r2@Fix(TRowExtendF(_, _, _))) =>
       for {
         rewriteResult <- rewriteRow(r2, label1)
-        (s1, fieldType, rowTail) = rewriteResult.value
+        (s1, fieldType2, rowTail2) = rewriteResult.value
         s <- varName(rowTail1) match
           case Some(name) if s1.contains(name)  => tiFail(TypeError.RecursiveRow)
           case _ => for {
-            s2 <- unify(v1(s1), fieldType(s1))
+            s2 <- unify(fieldType1(s1), fieldType2(s1))
             s3 = s2 |+| s1
-            s4 <- unify(rowTail1(s3), rowTail(s3))
+            s4 <- unify(rowTail1(s3), rowTail2(s3))
           } yield s4 |+| s3
       } yield s
-    case (t1,t2) => tiFail[Substitution](TypeError.TypesDoNotUnify(s"t1: $t1, t2: $t2"))
+    case (t1,t2) => tiFail[Substitution](TypeError.TypesDoNotUnify(s"t1: ${ppType(t1)}, t2: ${ppType(t2)}"))
 
   def inferTypeAlg =
     Algebra((e: ExprF[TypeCheckResult]) =>
@@ -275,7 +277,7 @@ object Types:
               updatedEnv = e(fSubst)
               argPair <- arg(updatedEnv)
               (argSubst, argType) = argPair
-              s3 <- unify(Fix(TFnF(argType(argSubst), v(argSubst))), fType(argSubst))
+              s3 <- unify(Fix(TFnF(argType, v)), fType(argSubst))
             } yield (s3 |+| argSubst |+| fSubst, v(s3))
         case Expr.LamF(x, body) =>
           (e: TypeEnv) =>
@@ -312,4 +314,4 @@ object Types:
   def inferType = scheme.cata(inferTypeAlg)
 
   def runInference(env: TypeEnv)(expr: Expr): Error[Type] =
-    inferType(expr)(env).map((s, t) => t(s)).run(emptyState).map(_._2)
+  inferType(expr)(env).map((s, t) => t(s)).run(emptyState).map(_._2)
