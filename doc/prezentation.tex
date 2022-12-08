@@ -1,39 +1,126 @@
-\documentclass{amsart}
-
+\documentclass[gray, 12pt]{beamer}
+\usepackage{bussproofs}
+\usepackage{listings,fancyvrb}
+\usepackage{verbatimbox}
+%% \usepackage{logicthemelive}
+\author{Gyorgy Farkas}
+\title{Types for data processing}
 \begin{document}
-  \section{Introduction}
-The goal is to build a domain specific language for large scale (big) data
-manipulation, that helps reasoning about the behaviour of data,
-specificly the data operations as implemented in spark. This is
-different from simple embedded DSLs that would target to make reading
-and writing data manipulations easier. However still do not aim for
-the strongest and broadest possible language, instead it is targeting
-to find a precise enough language that can exclude ill-behaving
-programs, that would cost too much to run, but still be relatively cheap to
-implement and use. This goal I think exlude highly complicated, fully
-dependent typed languages (like idris) and probably all general purpose
-programming languages (haskell or scala) that might be capable to
-achieve it with all the bells and whistles they have as a type system and
-extensions, but not being specific to the problem might make solutions
-unnecessarily complicated.
+\maketitle
 
-The work introduces two independently well studied typing concepts and
-tries to make them work interconnected.
+\frame{
+  \frametitle{Typing data processing seems compilcated}
+  \begin{itemize}
+    \item Data schemas give us a static view
+    \item Reasoning about processing behavior is not supported by declared schemas
+    \item programming languages are not very good at dealing with external data schemas as types
+  \end{itemize}
+}
+
+\frame{
 \begin{itemize}
-  \item row types, and extensible records
-  \item substructural (linear) types, and resoure tracking in types
+  \item Do not want to deal with schemas explicitly
+  \item Let us reason about data processing programs
 \end{itemize}
-  \section{Rows}
-Type safe operations on records without first declaring explicit record types is a usefull convenience capability. 
+}
 
-  \section{Linear types}
-  \section{the csv language implementation}
-  \section{generating spark programs}
-  \section{Closing remarks}
+\frame {
+  \frametitle{Existing typings}
+  \begin{itemize}
+    \item Dynamic typing
+    \item Relational Mapping
+    \item Structural types
+    \item Monadic wrappers for isolating behavior
+    \item Type providers
+    \item Full dependent types
+  \end{itemize}
+}
 
-\end{document}
+\frame{
+  \frametitle{Suggested options}
+  \begin{itemize}
+    \item Extensible records, row types, enables dealing with data without predifined schema,
+    while it remains statically typed
 
-%%% Local Variables:
-%%% mode: latex
-%%% TeX-master: t
-%%% End:
+    \item Substructural types, reasoning about resource usage
+  \end{itemize}
+}
+
+\frame{
+  \frametitle{Extensible records}
+  The extensible row datatype is actually a glorified Map from fields to values, that allows the following operations:
+  \begin{equation*}
+  \forall (r:\rho) (l, v:\tau)  (>> (l) (v:\tau) (r:\rho)) \rightarrow \{ (l, v:\tau) | r:\rho \} \label{E: extend} \tag{extend}
+  \end{equation*}
+
+  \begin{equation*}
+   \forall (r:\rho) (l, v:\tau)  (<< (l) \{ (l, v:\tau) | r:\rho \} ) \rightarrow r:\rho \label{E: restrict} \tag{restrict}
+  \end{equation*}
+  \begin{equation*}
+   \forall (r:\rho) (l, v:\tau)  (. (l) (\{ (l, v:\tau) | r:\rho \})) \rightarrow v:\tau \label{E: project} \tag{project}
+   \end{equation*}
+}
+
+\frame{
+  \frametitle{Type inference for rows}
+  \begin{prooftree}
+      \AxiomC{$s \sim  \{(l::\tau)|s'\} : \theta_1$}
+       \AxiomC{$\theta_1\tau \sim \theta_1\tau':\theta_2$}
+       \AxiomC{$\theta_2(\theta_1 s) \sim \theta_2(\theta_1 r):\theta_3$}
+       \TrinaryInfC{ $ \{(l:: \tau)| r\} \sim s : \theta_1 \circ \theta_2 \circ \theta_3$ }
+       \RightLabel{\scriptsize{uni-row}}
+   \end{prooftree}
+
+   \begin{prooftree}
+     \AxiomC{$l \neq l'$}
+     \AxiomC{$r \sim  \{(l::\tau)| r' \}:\theta$}
+     \BinaryInfC{ $ \{(l':: \tau')| r\} \sim \{(l::\tau), (l'::\tau')| r' \}$ }
+     \RightLabel{\scriptsize{row-swap}}
+    \end{prooftree}
+
+    \begin{prooftree}
+       \AxiomC{ $ \{(l::\tau)| r\} \sim  \{(l::\tau)| r\}  : \emptyset$ }
+       \RightLabel{\scriptsize{rowhead-row}}
+    \end{prooftree}
+
+      \begin{prooftree}
+        \AxiomC{$fresh(\alpha)$}
+         \AxiomC{$fresh(\beta)$}
+         \BinaryInfC{ $\alpha \sim \{l::\beta | \alpha \} : \lbrack \alpha \rightarrow \{(l::\beta) | \alpha \}$ }
+         \RightLabel{\scriptsize{row-var}}
+      \end{prooftree}
+}
+
+\frame{
+  \frametitle{cvsScheme Demo}
+  Marketing is king
+}
+
+\frame{
+  \frametitle{Substructural types - structural laws}
+  \begin{itemize}
+    \item Weakening
+    \item Exchange
+    \item Contraction
+  \end{itemize}
+}
+\frame{
+  \frametitle{Linear types}
+  \begin{itemize}
+    \item No Weakening or contraction, exchange might be ok.
+    \item Exactly once semantics
+  \end{itemize}
+}
+
+
+\frame{
+  \frametitle{references}
+  \begin{thebibliography}{9}
+    \bibitem{wadler96} Nick Benton, Philip Wadler. (1996) Linear logic, monads, and the lambda calculus, 11. IEEE Symposium on Logic in Computer Science
+    \bibitem{wadler95} David N. Turner, Philip Wadler, Christian Mossin.,(1995) Once upon a type 7. ICFP
+    \bibitem{TAPL} Benjamin C. Pierce, (2002) Types and programming languages
+    \bibitem{ATAPL} Benjamin C. Pierce, (2004) (ed.) Advanced Topics in Types and Programming Languages
+    \bibitem{pfenning} Frank Pfenning, Linear Logic lectures, (2012) https://www.cs.cmu.edu/~fp/courses/15816-s12/
+    \bibitem{leijen} Daan Leijen, (2005) \emph{Extensible records with scoped labels}, https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/scopedlabels.pdf
+  \end{thebibliography}
+}\end{document}
