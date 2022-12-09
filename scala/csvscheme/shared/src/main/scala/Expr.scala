@@ -37,6 +37,7 @@ object Expr:
         case PrimF(prim)                 => PrimF(prim)
         case LetF(name, defExpr, inExpr) => LetF(name, f(defExpr), f(inExpr))
         case RecordF(fields)             => RecordF(fields.map((l, v) => (l, f(v))))
+        
   type Expr = Fix[ExprF]
 
   def let(name: String, d: Expr, i: Expr): Expr = Fix(LetF(name, d, i))

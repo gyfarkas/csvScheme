@@ -17,6 +17,7 @@ object PP:
           case TEmptyRowF() => "{}"
           case TRowExtendF(label, v, rowTail) => s"{$label:$v,$rowTail}"
           case TListF(t) => s"[$t]"
+          case TRecordF(t) => t
         }
 
         val f = scheme.cata(alg)

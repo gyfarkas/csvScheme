@@ -117,9 +117,9 @@ class BasicTests extends munit.FunSuite {
     val rec = record(Map("a" -> intE(1), "c" -> stringE("3")))
     val typeChecked = runInference(Map.empty)(rec)
     val expected =
-      Fix(TypeF.TRowExtendF("a", Fix(TypeF.TIntF()),
-       Fix(TypeF.TRowExtendF("c",Fix(TypeF.TStringF()),
-        Fix(TypeF.TEmptyRowF())))))
+      Fix(TypeF.TRecordF(Fix(TypeF.TRowExtendF("a", Fix(TypeF.TIntF()),
+        Fix(TypeF.TRowExtendF("c",Fix(TypeF.TStringF()),
+          (Fix(TypeF.TEmptyRowF()))))))))
     assertEquals(typeChecked, Right(expected))
   }
 
@@ -277,5 +277,13 @@ class BasicTests extends munit.FunSuite {
     val parsed = let("table", readString(table), select(missingCol, varE("table")))
     val typeChecked = runInference(Map.empty)(parsed)
     assert(typeChecked.isLeft)
+  }
+
+  test("invalid record extension") {
+    val exp = extend("l", intE(1), intE(1))
+    val typeChecked = runInference(Map.empty)(exp)
+    assert(typeChecked.isLeft)
+    assertEquals(typeChecked, Left(TypeError.TypesDoNotUnify("t1: Int, t2: 'r3")))
+
   }
 }

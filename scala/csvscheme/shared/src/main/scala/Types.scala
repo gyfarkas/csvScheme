@@ -8,6 +8,8 @@ import cats.data.StateT
 import csvscheme.Expr._
 import csvscheme.PP.ppType
 import higherkindness.droste.{Algebra, scheme}
+import cats.data.EitherT
+import cats.data.State
 
 object Types:
   enum TypeF[T]:
@@ -16,6 +18,7 @@ object Types:
     case TStringF[T]() extends TypeF[T]
     case TFnF[T](from: T, to: T) extends TypeF[T]
     case TVarF[T](name: String) extends TypeF[T]
+    case TRecordF[T](fields: T) extends TypeF[T]
     case TEmptyRowF[T]() extends TypeF[T]
     case TRowExtendF[T](label: String, v: T, rowTail: T) extends TypeF[T]
     case TListF[T](elemType: T) extends TypeF[T]
@@ -30,6 +33,7 @@ object Types:
       case TVarF(name)    => TVarF(name)
       case TEmptyRowF()   => TEmptyRowF()
       case TRowExtendF(label, v, rowTail) => TRowExtendF(label, f(v), f(rowTail))
+      case TRecordF(t) => TRecordF(f(t))
       case TListF(t) => TListF(f(t))
 
   type Type = Fix[TypeF]
@@ -49,6 +53,7 @@ object Types:
     case RecursiveRow
 
   type Error[A] = Either[TypeError, A]
+  type TState[A] = State[TypeState, A]
   type TI[A] = StateT[Error, TypeState, A]
   type TypeCheckResult = TypeEnv => TI[(Substitution, Type)]
 
@@ -70,7 +75,8 @@ object Types:
           case TVarF(name)    => Set(name)
           case TFnF(from, to) => from.union(to)
           case TRowExtendF(_, v, rowTail) => v.union(rowTail)
-          case TListF(t)       => t
+          case TListF(t)      => t
+          case TRecordF(t)    => t
           case _              => Set.empty
       }
       val f = scheme.cata(alg)
@@ -93,6 +99,7 @@ object Types:
             val t2: Type = rowTail(s)
             Fix(TRowExtendF(label, v, rowTail))
           case TListF(t) =>  Fix(TListF(t(s)))
+          case TRecordF(t) => Fix(TRecordF(t(s)))
       )
       val f = scheme.cata(alg)
       f(t)
@@ -151,17 +158,17 @@ object Types:
     case Prim.Extend(label) => for {
       r <- newTypeVar("r")
       a <- newTypeVar("a")
-    } yield (nullSubst, Fix(TFnF(a, Fix(TFnF(r, Fix(TRowExtendF(label, a, r)))))))
+    } yield (nullSubst, Fix(TFnF(a, Fix(TFnF(Fix(TRecordF(r)), Fix(TRecordF(Fix(TRowExtendF(label, a, r)))))))))
 
     case Prim.Project(label) => for {
       a <- newTypeVar("a")
       r <- newTypeVar("r")
-    } yield (nullSubst, Fix(TFnF(Fix(TRowExtendF(label, a, r)), a)))
+    } yield (nullSubst, Fix(TFnF(Fix(TRecordF(Fix(TRowExtendF(label, a, r)))), a)))
 
     case Prim.Remove(label) => for {
       a <- newTypeVar("a")
       r <- newTypeVar("r")
-    } yield (nullSubst, Fix(TFnF(Fix(TRowExtendF(label, a, r)), r)))
+    } yield (nullSubst, Fix(TFnF(Fix(TRecordF(Fix(TRowExtendF(label, a, r)))), r)))
 
     case Prim.ListMap => for {
       a <- newTypeVar("b")
@@ -205,6 +212,7 @@ object Types:
   def varName(t: Type): Option[String] =
     def go(t: Type): (Map[String, Type], Option[String]) = t match
       case Fix(TVarF(name)) => (Map.empty, Some(name))
+      case Fix(TRecordF(t)) => go(t)
       case Fix(TEmptyRowF()) => (Map.empty, None)
       case Fix(TRowExtendF(label, v, r)) =>
         val rs = go(r)
@@ -246,6 +254,7 @@ object Types:
         s2 <- unify(b(s1), d(s1))
       } yield s1 |+| s2
     case (Fix(TListF(t1)), Fix(TListF(t2))) => unify(t1, t2)
+    case (Fix(TRecordF(t1)), Fix(TRecordF(t2))) => unify(t1, t2)
     case (Fix(TEmptyRowF()), Fix(TEmptyRowF())) => nullSubst.pure
     case (r1@Fix(TRowExtendF(label1, fieldType1, rowTail1)), r2@Fix(TRowExtendF(_, _, _))) =>
       for {
@@ -307,7 +316,7 @@ object Types:
             case ((l, v), srti) => srti.flatMap((s,r) =>
                 v(e).map((s1, t1) =>
                  (s |+| s1, Fix(TRowExtendF(l, t1, r)))))
-          }
+          }.map((s,t) => (s, Fix(TRecordF(t))))
       }
     )
 
