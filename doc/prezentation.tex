@@ -1,36 +1,40 @@
-\documentclass[gray, 12pt]{beamer}
+\documentclass[gray, 10pt]{beamer}
 \usepackage{bussproofs}
 \usepackage{listings,fancyvrb}
 \usepackage{verbatimbox}
+\usepackage{amssymb}
 %% \usepackage{logicthemelive}
 \author{Gyorgy Farkas}
 \title{Types for data processing}
 \begin{document}
 \maketitle
-
+\frame{
+  \frametitle{types, remarks}
+\begin{itemize}
+  \item types are for reasoning about program correctness vs. labelling storage locations
+  \item ie. well typed programs do run with the expected semantics (soundness)
+  \item no completness, not all possible correct program will be typeble
+  \item Curry-Howard types are propositions
+\end{itemize}
+}
 \frame{
   \frametitle{Typing data processing seems compilcated}
   \begin{itemize}
     \item Data schemas give us a static view
-    \item Reasoning about processing behavior is not supported by declared schemas
     \item programming languages are not very good at dealing with external data schemas as types
+    \item Reasoning about processing behavior is not supported by declared schemas
+    \item There are important behaviors not expressed (for exapmle: Spark narrow vs wide transformations)
   \end{itemize}
-}
-
-\frame{
-\begin{itemize}
-  \item Do not want to deal with schemas explicitly
-  \item Let us reason about data processing programs
-\end{itemize}
 }
 
 \frame {
   \frametitle{Existing typings}
   \begin{itemize}
-    \item Dynamic typing
-    \item Relational Mapping
-    \item Structural types
+    \item Dynamic typing (no typing)
+    \item Relational Mapping (ORMs)
+    \item Structural types (half typing)
     \item Monadic wrappers for isolating behavior
+    \item Language integrated query
     \item Type providers
     \item Full dependent types
   \end{itemize}
@@ -47,46 +51,51 @@
 }
 
 \frame{
-  \frametitle{Extensible records}
+  \frametitle{Extensible records: operations}
   The extensible row datatype is actually a glorified Map from fields to values, that allows the following operations:
   \begin{equation*}
-  \forall (r:\rho) (l, v:\tau)  (>> (l) (v:\tau) (r:\rho)) \rightarrow \{ (l, v:\tau) | r:\rho \} \label{E: extend} \tag{extend}
+  \forall (r:\rho) (l :: (v:\tau))  (\gg l  ,(v:\tau), (r:\rho)) \rightarrow \{ (l :: (v:\tau)) | r:\rho \} \label{E: extend} \tag{extend}
   \end{equation*}
 
   \begin{equation*}
-   \forall (r:\rho) (l, v:\tau)  (<< (l) \{ (l, v:\tau) | r:\rho \} ) \rightarrow r:\rho \label{E: restrict} \tag{restrict}
+   \forall (r:\rho) (l :: (v:\tau)) (\ll l, \{ (l :: (v:\tau)) | r:\rho \} ) \rightarrow r:\rho \label{E: restrict} \tag{restrict}
   \end{equation*}
   \begin{equation*}
-   \forall (r:\rho) (l, v:\tau)  (. (l) (\{ (l, v:\tau) | r:\rho \})) \rightarrow v:\tau \label{E: project} \tag{project}
+   \forall (r:\rho) (l ::(v:\tau))  (. l, (\{ l :: (v:\tau) | r:\rho \})) \rightarrow v:\tau \label{E: project} \tag{project}
    \end{equation*}
 }
 
 \frame{
   \frametitle{Type inference for rows}
+  Unification
   \begin{prooftree}
-      \AxiomC{$s \sim  \{(l::\tau)|s'\} : \theta_1$}
-       \AxiomC{$\theta_1\tau \sim \theta_1\tau':\theta_2$}
-       \AxiomC{$\theta_2(\theta_1 s) \sim \theta_2(\theta_1 r):\theta_3$}
-       \TrinaryInfC{ $ \{(l:: \tau)| r\} \sim s : \theta_1 \circ \theta_2 \circ \theta_3$ }
+      \AxiomC{$s \cong  \{(l::\tau)|s'\} : \theta_1$}
+      \noLine
+      \UnaryInfC{$\theta_1\tau \sim \theta_1\tau':\theta_2$}
+
+      \AxiomC{$tail(r) \notin dom(\theta_1)$}
+      \noLine
+      \UnaryInfC{$\theta_2(\theta_1 s) \sim \theta_2(\theta_1 r):\theta_3$}
+      \BinaryInfC{ $ \{(l:: \tau)| r\} \sim s : \theta_1 \circ \theta_2 \circ \theta_3$ }
        \RightLabel{\scriptsize{uni-row}}
    \end{prooftree}
-
+ Rewrite rules
    \begin{prooftree}
      \AxiomC{$l \neq l'$}
-     \AxiomC{$r \sim  \{(l::\tau)| r' \}:\theta$}
-     \BinaryInfC{ $ \{(l':: \tau')| r\} \sim \{(l::\tau), (l'::\tau')| r' \}$ }
+     \AxiomC{$r \cong  \{(l::\tau)| r' \}:\theta$}
+     \BinaryInfC{ $ \{(l':: \tau')| r\} \cong \{(l::\tau), (l'::\tau')| r' \}$ }
      \RightLabel{\scriptsize{row-swap}}
     \end{prooftree}
 
     \begin{prooftree}
-       \AxiomC{ $ \{(l::\tau)| r\} \sim  \{(l::\tau)| r\}  : \emptyset$ }
+       \AxiomC{ $ \{(l::\tau)| r\} \cong \{(l::\tau)| r\}  : \emptyset$ }
        \RightLabel{\scriptsize{rowhead-row}}
     \end{prooftree}
 
       \begin{prooftree}
         \AxiomC{$fresh(\alpha)$}
          \AxiomC{$fresh(\beta)$}
-         \BinaryInfC{ $\alpha \sim \{l::\beta | \alpha \} : \lbrack \alpha \rightarrow \{(l::\beta) | \alpha \}$ }
+         \BinaryInfC{ $\gamma \cong \{l::\beta | \alpha \} : \lbrack \gamma \rightarrow \{(l::\beta) | \alpha \}\rbrack$ }
          \RightLabel{\scriptsize{row-var}}
       \end{prooftree}
 }
@@ -100,16 +109,56 @@
   \frametitle{Substructural types - structural laws}
   \begin{itemize}
     \item Weakening
+    \begin{prooftree}
+      \AxiomC{$\Gamma \vdash A$}
+      \UnaryInfC{$\Gamma, B \vdash A$}
+    \end{prooftree}
     \item Exchange
+    \begin{prooftree}
+      \AxiomC{$A,B \vdash C$}
+      \UnaryInfC{$B,A \vdash C$}
+    \end{prooftree}
     \item Contraction
+    \begin{prooftree}
+      \AxiomC{$\Gamma, \Gamma, A \vdash B$}
+      \UnaryInfC{$\Gamma,A \vdash B$}
+    \end{prooftree}
   \end{itemize}
 }
 \frame{
-  \frametitle{Linear types}
+  \frametitle{Linear types: new operators}
   \begin{itemize}
     \item No Weakening or contraction, exchange might be ok.
     \item Exactly once semantics
   \end{itemize}
+
+  \begin{itemize}
+    \item new operators:$!A$:"of course $A$"
+    \item $A \otimes B$: "both $A$ and $B$",
+    \item $A \multimap B$: "consume $A$ to get a $B$",
+    \item  $A \And B$: "choose from $A$ and $B$"
+  \end{itemize}
+}
+\frame{
+  \frametitle{Linear logic: Some new rules}
+    \begin{prooftree}
+      \AxiomC{$\Gamma \vdash B, \Delta$}
+      \AxiomC{$\Gamma' \vdash C, \Delta'$}
+      \BinaryInfC{$\Gamma,\Gamma' \vdash B \otimes C, \Delta, \Delta'$}
+    \end{prooftree}
+    \begin{prooftree}
+      \AxiomC{$\Gamma, A,B \vdash \Delta$}
+      \UnaryInfC{$\Gamma, A \otimes B \vdash \Delta$}
+    \end{prooftree}
+    \begin{prooftree}
+      \AxiomC{$\Gamma \vdash A, \Delta$}
+      \AxiomC{$\Gamma' \vdash B, \Delta'$}
+      \BinaryInfC{$\Gamma, \Gamma', A \multimap B  \vdash \Delta, \Delta'$}
+    \end{prooftree}
+    \begin{prooftree}
+      \AxiomC{$\Gamma \vdash A, \Delta$}
+      \UnaryInfC{$\Gamma \vdash A \multimap B, \Delta$}
+    \end{prooftree}
 }
 
 
